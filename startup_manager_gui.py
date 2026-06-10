@@ -256,7 +256,7 @@ SEARCH_PLACEHOLDER = 'Search startup items...  (Ctrl+F)'
 
 
 class StartupManagerGUI(tk.Tk):
-    """Cleanroom GUI: Optimizer, Activity, Startup, Cleaner, Uninstaller, Restore."""
+    """Cleanroom GUI: Review, Activity, Startup, Cleaner, Uninstaller, Restore."""
 
     def __init__(self, config_path=None, restore_log_path=None):
         super().__init__()
@@ -417,7 +417,7 @@ class StartupManagerGUI(tk.Tk):
         self.uninstall_tab = ttk.Frame(self.tab_control, style='Content.TFrame')
         self.restore_tab = ttk.Frame(self.tab_control, style='Content.TFrame')
         self.settings_tab = ttk.Frame(self.tab_control, style='Content.TFrame')
-        self.tab_control.add(self.optimizer_tab, text='  ⚡ Optimizer  ')
+        self.tab_control.add(self.optimizer_tab, text='  📋 Review  ')
         self.tab_control.add(self.activity_tab, text='  📋 Activity  ')
         self.tab_control.add(self.startup_tab, text='  🚀 Startup  ')
         self.tab_control.add(self.cleanup_tab, text='  🧹 Cleaner  ')
@@ -468,48 +468,73 @@ class StartupManagerGUI(tk.Tk):
 
         title_row = ttk.Frame(title_container, style='Content.TFrame')
         title_row.pack(anchor='w')
-        self._logo_photo = self._load_logo(36)
+        self._logo_photo = self._load_logo(52)
         if self._logo_photo is not None:
-            ttk.Label(title_row, image=self._logo_photo, background=BG).pack(side='left', padx=(0, 8))
-        ttk.Label(title_row, text=brand.APP_DISPLAY, style='Header.TLabel').pack(side='left')
+            ttk.Label(title_row, image=self._logo_photo, background=BG).pack(side='left', padx=(0, 10))
+        title_text = ttk.Frame(title_row, style='Content.TFrame')
+        title_text.pack(side='left')
+        ttk.Label(title_text, text=brand.APP_DISPLAY, style='Header.TLabel').pack(anchor='w')
+        ttk.Label(title_text, text=brand.APP_MOTTO, style='SubHeader.TLabel').pack(anchor='w', pady=(2, 0))
         ttk.Label(title_container, text=brand.APP_TAGLINE,
                   style='SubHeader.TLabel').pack(anchor='w', pady=(4, 0))
 
-        # Suite-wide stats (each section refreshes its own badge)
+        # Archive-first reassurance — visible at the point of action
+        reassurance = tk.Frame(title_container, bg=BG)
+        reassurance.pack(anchor='w', pady=(6, 0))
+        tk.Label(reassurance,
+                 text='🛡  Archive-first mode is ON — Cleanroom moves files to archive before any removal.',
+                 bg=BG, fg=ACCENT, font=('Segoe UI', 9, 'bold')).pack(anchor='w')
+
+        # Proof-first header badges (not fake PC health scores)
         summary = ttk.Frame(title_container, style='Content.TFrame')
         summary.pack(anchor='w', pady=(8, 0))
-        self.hdr_health_lbl = ttk.Label(summary, text='❤ Health: —', style='Badge.TLabel')
-        self.hdr_startup_lbl = ttk.Label(summary, text='🚀 Startup: —', style='Badge.TLabel')
-        self.hdr_programs_lbl = ttk.Label(summary, text='🗑 Programs: —', style='Badge.TLabel')
+        self.hdr_measured_lbl = ttk.Label(summary, text='📁 Measured: —', style='Badge.TLabel')
+        self.hdr_archived_lbl = ttk.Label(summary, text='🗂 Archived: —', style='Badge.TLabel')
         self.hdr_reclaim_lbl = ttk.Label(summary, text='🧹 Reclaimable: —', style='Badge.TLabel')
-        self.hdr_restorable_lbl = ttk.Label(summary, text='↩ Restorable: —', style='Badge.TLabel')
-        self.hdr_trust_lbl = ttk.Label(summary, text='🔬 Trust: —', style='Badge.TLabel')
-        for lbl in (self.hdr_health_lbl, self.hdr_startup_lbl, self.hdr_programs_lbl,
-                    self.hdr_reclaim_lbl, self.hdr_restorable_lbl, self.hdr_trust_lbl):
+        self.hdr_trust_lbl = ttk.Label(summary, text='🔬 Custody Trust: —', style='Badge.TLabel')
+        self.hdr_trust_why = ttk.Button(summary, text='Why?', style='Action.TButton',
+                                        width=5, command=self._show_custody_trust_why)
+        self.hdr_receipt_lbl = ttk.Label(summary, text='🧾 Last Receipt: —', style='Badge.TLabel')
+        for lbl in (self.hdr_measured_lbl, self.hdr_archived_lbl, self.hdr_reclaim_lbl,
+                    self.hdr_trust_lbl):
             lbl.pack(side='left', padx=(0, 4))
-        self._add_tooltip(self.hdr_restorable_lbl,
-                          'Everything Cleanroom has archived and can bring back.')
+        self.hdr_trust_why.pack(side='left', padx=(0, 4))
+        self.hdr_receipt_lbl.pack(side='left', padx=(0, 4))
+        self._add_tooltip(self.hdr_measured_lbl,
+                          'Measured = logged actions in your history.\n'
+                          'Bytes moved = lifetime logged archive movement.')
+        self._add_tooltip(self.hdr_archived_lbl,
+                          'Archived = artifacts verified on disk and restorable now.')
+        self._add_tooltip(self.hdr_reclaim_lbl,
+                          'Reclaimable = current scan candidates (checked items ready to archive).')
         self._add_tooltip(self.hdr_trust_lbl,
-                          'Custody trust score — % of archived artifacts verified on disk right now.')
+                          'Custody trust — % of archived artifacts verified on disk right now.')
+        self._add_tooltip(self.hdr_trust_why,
+                          'View evidence: what custody trust means and what is missing.')
+        self._add_tooltip(self.hdr_receipt_lbl,
+                          'Your most recent Cleanroom Receipt after a cleanup.')
 
         toolbar = ttk.Frame(top, style='Content.TFrame')
         toolbar.pack(side='right', pady=(6, 0))
         self.tb_scan = ttk.Button(toolbar, text='🔍 Scan', style='Action.TButton', command=self.refresh_cleanup)
         self.tb_scan.pack(side='left', padx=4)
-        self.tb_apply = ttk.Button(toolbar, text='🗂 Apply', style='Action.TButton', command=self.apply_cleanup)
+        self.tb_preview = ttk.Button(toolbar, text='🧾 Preview Receipt', style='Action.TButton',
+                                     command=self.preview_cleanup_receipt)
+        self.tb_preview.pack(side='left', padx=4)
+        self.tb_apply = ttk.Button(toolbar, text='🗂 Archive & Clean', style='Primary.TButton',
+                                   command=self.apply_cleanup)
         self.tb_apply.pack(side='left', padx=4)
-        self.tb_restore = ttk.Button(toolbar, text='↩ Restore', style='Action.TButton', command=self.refresh_restore)
+        self.tb_restore = ttk.Button(toolbar, text='↩ Restore', style='Action.TButton',
+                                    command=lambda: (self.tab_control.select(5), self.refresh_restore()))
         self.tb_restore.pack(side='left', padx=4)
-        self.tb_schedule = ttk.Button(toolbar, text='⏰ Schedule', style='Action.TButton', command=self.schedule_optimization)
-        self.tb_schedule.pack(side='left', padx=4)
         theme_btn = ttk.Button(toolbar, text='🎨', style='Action.TButton',
                                width=3, command=self.cycle_theme)
         theme_btn.pack(side='left', padx=4)
         nxt = THEME_ORDER[(THEME_ORDER.index(CURRENT_THEME) + 1) % len(THEME_ORDER)]
-        self._add_tooltip(self.tb_scan, 'Quick scan for cleanup candidates. (F5 refreshes everything)')
-        self._add_tooltip(self.tb_apply, 'Apply cleanup using current settings.')
-        self._add_tooltip(self.tb_restore, 'Reload restore log and preview entries.')
-        self._add_tooltip(self.tb_schedule, 'Open the scheduling wizard.')
+        self._add_tooltip(self.tb_scan, 'Scan configured folders for cleanup candidates. (F5 refreshes everything)')
+        self._add_tooltip(self.tb_preview, 'Preview what the Cleanroom Receipt will say before you archive anything.')
+        self._add_tooltip(self.tb_apply, 'Move checked items to the archive — nothing is permanently deleted.')
+        self._add_tooltip(self.tb_restore, 'Open Restore tab and reload archived entries.')
         self._add_tooltip(theme_btn,
                           f"Theme: {PALETTES[CURRENT_THEME]['LABEL']} — click for "
                           f"{PALETTES[nxt]['LABEL']}. All themes are in Settings.")
@@ -536,7 +561,7 @@ class StartupManagerGUI(tk.Tk):
         ttk.Label(sidebar, text=brand.APP_DISPLAY, font=('Segoe UI', 11, 'bold'),
                   background=SIDEBAR_BG).pack(anchor='w', padx=8, pady=(8, 8))
         self._nav_buttons = []
-        for idx, label in enumerate(('⚡  Dashboard', '📋  Activity', '🚀  Startup', '🧹  Cleaner',
+        for idx, label in enumerate(('📋  Review', '📊  Activity', '🚀  Startup', '🧹  Cleaner',
                                      '🗑  Uninstaller', '↩  Restore', '⚙  Settings')):
             btn = ttk.Button(sidebar, text=label, style='Sidebar.TButton',
                              command=lambda i=idx: self.tab_control.select(i))
@@ -547,7 +572,7 @@ class StartupManagerGUI(tk.Tk):
         ttk.Label(sidebar, text='Tools', font=('Segoe UI', 11, 'bold'),
                   background=SIDEBAR_BG).pack(anchor='w', padx=8, pady=(0, 8))
         tools = [
-            ('🩺  Registry Health', self.open_registry_health,
+            ('📸  Registry Snapshot', self.open_registry_health,
              'Find registry entries pointing at missing files. Archive-first.'),
             ('🕐  Cleanroom Rewind', self.open_time_machine,
              'Roll back whole days of Cleanroom actions.'),
@@ -586,8 +611,8 @@ class StartupManagerGUI(tk.Tk):
     def _build_optimizer_tab(self):
         header = ttk.Frame(self.optimizer_tab, style='Content.TFrame')
         header.pack(fill='x', padx=10, pady=10)
-        ttk.Label(header, text='Optimizer Dashboard', style='Header.TLabel').pack(anchor='w')
-        ttk.Label(header, text='Actionable recommendations to keep your PC lean, safe, and fast.',
+        ttk.Label(header, text='Review', style='Header.TLabel').pack(anchor='w')
+        ttk.Label(header, text='Scan → preview receipt → archive & clean → verify custody → rewind if needed.',
                   style='SubHeader.TLabel').pack(anchor='w', pady=(4, 0))
 
         cards = ttk.Frame(self.optimizer_tab, style='Content.TFrame')
@@ -600,15 +625,16 @@ class StartupManagerGUI(tk.Tk):
         self.health_canvas.pack(side='left', padx=(12, 4), pady=10)
         health_text = tk.Frame(health_card, bg=CARD_BG)
         health_text.pack(side='left', padx=(0, 16), pady=10)
-        tk.Label(health_text, text='SYSTEM HEALTH', bg=CARD_BG, fg=MUTED,
+        tk.Label(health_text, text='ITEMS TO REVIEW', bg=CARD_BG, fg=MUTED,
                  font=('Segoe UI', 8, 'bold')).pack(anchor='w', pady=(8, 2))
         self.health_band_lbl = tk.Label(health_text, text='—', bg=CARD_BG, fg=TEXT,
                                         font=('Segoe UI', 13, 'bold'))
         self.health_band_lbl.pack(anchor='w')
-        self.health_spark = tk.Canvas(health_text, width=110, height=22, bg=CARD_BG,
-                                      highlightthickness=0)
-        self.health_spark.pack(anchor='w', pady=(4, 0))
-        self._add_tooltip(health_text, 'Health score history across your Cleanroom sessions.')
+        self.health_note_lbl = tk.Label(health_text, text='Not a PC health score — evidence only.',
+                                        bg=CARD_BG, fg=MUTED, font=('Segoe UI', 8), wraplength=140, justify='left')
+        self.health_note_lbl.pack(anchor='w', pady=(4, 0))
+        self._add_tooltip(health_text, 'How many cleanup candidates await your review.\n'
+                                       'Cleanroom never shows fake “PC health” numbers.')
 
         self.stat_startup_value = self._stat_card(cards, 'Startup items')
         self.stat_cleanup_value = self._stat_card(cards, 'Cleanup candidates')
@@ -635,9 +661,12 @@ class StartupManagerGUI(tk.Tk):
 
         actions = ttk.Frame(self.optimizer_tab, style='Content.TFrame')
         actions.pack(fill='x', padx=10, pady=(10, 8))
-        self.schedule_btn = ttk.Button(actions, text='Schedule Optimization', style='Primary.TButton',
+        self.schedule_btn = ttk.Button(actions, text='Schedule Cleanup', style='Action.TButton',
                                        command=self.schedule_optimization)
         self.schedule_btn.pack(side='left')
+        self.preview_receipt_btn = ttk.Button(actions, text='Preview Receipt', style='Primary.TButton',
+                                              command=self.preview_cleanup_receipt)
+        self.preview_receipt_btn.pack(side='left', padx=6)
         self.open_archive_btn = ttk.Button(actions, text='Open Archive Folder', style='Action.TButton',
                                            command=self.open_archive_folder)
         self.open_archive_btn.pack(side='left', padx=6)
@@ -655,22 +684,23 @@ class StartupManagerGUI(tk.Tk):
         self.receipt_btn.pack(side='left', padx=6)
         self._add_tooltip(self.receipt_btn, 'Open the receipt from your most recent cleanup:\n'
                                             'what moved, space freed, disk days bought.')
-        self.reg_health_btn = ttk.Button(actions, text='🩺 Registry Health…', style='Action.TButton',
+        self.reg_health_btn = ttk.Button(actions, text='📸 Registry Snapshot…', style='Action.TButton',
                                          command=self.open_registry_health)
         self.reg_health_btn.pack(side='left', padx=6)
         self._add_tooltip(self.reg_health_btn,
-                          'Find registry entries that verifiably point to missing files\n'
+                          'Snapshot registry entries that verifiably point to missing files\n'
                           '(dead startup refs, broken App Paths, orphaned uninstallers).\n'
                           'Repairs are exported to .reg backups first — fully restorable.')
         self._add_tooltip(self.prune_btn, 'Permanently delete archived files older than N days.')
-        self._add_tooltip(self.schedule_btn, 'Schedule recurring optimization runs via Task Scheduler.')
+        self._add_tooltip(self.preview_receipt_btn, 'See what the receipt will record before archiving.')
+        self._add_tooltip(self.schedule_btn, 'Schedule recurring cleanup runs via Task Scheduler.')
         self._add_tooltip(self.open_archive_btn, 'Open the configured archive folder in Explorer.')
         self._add_tooltip(self.open_log_btn, 'Open cleanup_log.json.')
         self._add_tooltip(self.telemetry_btn, 'View or change the local telemetry opt-in.')
 
         rec_card = ttk.Frame(self.optimizer_tab, style='Card.TFrame')
         rec_card.pack(fill='both', expand=True, padx=10, pady=(0, 10))
-        ttk.Label(rec_card, text='Recommendations', font=('Segoe UI', 11, 'bold'),
+        ttk.Label(rec_card, text='What Cleanroom found', font=('Segoe UI', 11, 'bold'),
                   background=CARD_BG).pack(anchor='w', padx=10, pady=(8, 4))
         rec_frame = ttk.Frame(rec_card, style='Card.TFrame')
         rec_frame.pack(fill='both', expand=True, padx=10, pady=(0, 10))
@@ -719,6 +749,12 @@ class StartupManagerGUI(tk.Tk):
         self.stat_act_total = self._stat_card(top, 'Actions logged')
         self.stat_act_present = self._stat_card(top, 'Restorable now')
         self.stat_act_bytes = self._stat_card(top, 'Bytes in custody')
+        self._add_tooltip(self.stat_act_bytes,
+                          'Bytes in custody = verified files still restorable in the archive.')
+        ttk.Label(top, text='Reclaimable = current scan candidates · '
+                            'Bytes in custody = verified restorable files · '
+                            'Bytes moved = lifetime logged archive movement',
+                  style='Info.TLabel', wraplength=520).pack(side='left', padx=(8, 0), anchor='center')
 
         bar = ttk.Frame(self.activity_tab, style='Content.TFrame')
         bar.pack(fill='x', padx=10, pady=(0, 6))
@@ -761,6 +797,159 @@ class StartupManagerGUI(tk.Tk):
                  font=('Segoe UI', 9)).pack(anchor='w', padx=16, pady=(0, 14))
         return value
 
+    def _config_status_label(self):
+        """Sanitized config label — never expose repo folder names in the UI."""
+        try:
+            p = Path(self.cleanup_config_path).resolve()
+            data_root = brand.user_data_dir().resolve()
+            if p.is_relative_to(data_root):
+                return 'Editing Cleanroom configuration'
+        except Exception:
+            pass
+        return f'Config: {Path(self.cleanup_config_path).name}'
+
+    def _refresh_header_proof_badges(self):
+        """Update proof-first header badges from current log/custody/receipt state."""
+        entries = self._load_log_dicts()
+        measured = len(entries)
+        custody = {'verified': 0, 'total': 0, 'missing': 0, 'bytes_in_custody': 0}
+        if proof_module and entries:
+            try:
+                custody = proof_module.verify_entries(entries)
+            except Exception:
+                pass
+        trust = None
+        if ledger_module and custody.get('total'):
+            trust = ledger_module.trust_score(custody['verified'], custody['total'])
+        self.hdr_measured_lbl.config(text=f'📁 Measured: {measured:,}')
+        self.hdr_archived_lbl.config(text=f'🗂 Archived: {custody.get("verified", 0):,}')
+        selected = sum(self.cleanup_items[i].get('size', 0) for i in self.cleanup_selected
+                       if 0 <= i < len(self.cleanup_items)) if self.cleanup_items else 0
+        reclaim = selected if self.cleanup_selected else self.cleanup_total_size
+        self.hdr_reclaim_lbl.config(text=f'🧹 Reclaimable: {self._format_size(reclaim)}')
+        if trust is not None:
+            self.hdr_trust_lbl.config(text=f'🔬 Custody Trust: {trust}%')
+        else:
+            self.hdr_trust_lbl.config(text='🔬 Custody Trust: —')
+        receipt_path = None
+        if receipts_module:
+            try:
+                receipt_path = receipts_module.latest_receipt()
+            except Exception:
+                pass
+        if receipt_path:
+            stamp = receipt_path.stem.replace('receipt_', '')
+            if len(stamp) >= 8:
+                stamp = f'{stamp[:4]}-{stamp[4:6]}-{stamp[6:8]}'
+            self.hdr_receipt_lbl.config(text=f'🧾 Last Receipt: {stamp}')
+        else:
+            self.hdr_receipt_lbl.config(text='🧾 Last Receipt: Not generated')
+
+    def _show_text_dialog(self, title, text, width=620, height=480):
+        dlg = tk.Toplevel(self)
+        dlg.title(title)
+        dlg.geometry(f'{width}x{height}')
+        dlg.configure(bg=BG)
+        dlg.transient(self)
+        dlg.grab_set()
+        dlg.bind('<Escape>', lambda e: dlg.destroy())
+        frame = ttk.Frame(dlg, style='Content.TFrame')
+        frame.pack(fill='both', expand=True, padx=12, pady=12)
+        txt = tk.Text(frame, wrap='word', font=('Consolas', 10), relief='flat',
+                      bg=PREVIEW_BG, fg=TEXT, insertbackground=TEXT,
+                      highlightthickness=1, highlightbackground=BORDER)
+        scroll = ttk.Scrollbar(frame, orient='vertical', command=txt.yview)
+        txt.configure(yscrollcommand=scroll.set)
+        txt.pack(side='left', fill='both', expand=True)
+        scroll.pack(side='right', fill='y')
+        txt.insert('1.0', text)
+        txt.config(state='disabled')
+        ttk.Button(dlg, text='Close', style='Primary.TButton', command=dlg.destroy).pack(pady=(0, 12))
+
+    def preview_cleanup_receipt(self):
+        """Draft Cleanroom Receipt for checked candidates — before any archive."""
+        if receipts_module is None:
+            messagebox.showerror('Preview Receipt', 'Receipts module unavailable.')
+            return
+        if not self.cleanup_items:
+            messagebox.showinfo('Preview Receipt', 'Scan first — no candidates to preview.')
+            return
+        items = [self.cleanup_items[i] for i in sorted(self.cleanup_selected)
+                 if 0 <= i < len(self.cleanup_items)]
+        if not items:
+            messagebox.showinfo('Preview Receipt',
+                                'Check at least one item to preview what will be archived.')
+            return
+        cfg = self._load_cleanup_config() or {}
+        archive_dir = cfg.get('archive_dir') or '(configured archive folder)'
+        draft = [{
+            'src': it['path'],
+            'dest': f'{archive_dir}/…',
+            'reason': it.get('reason', 'other'),
+            'size': it.get('size', 0),
+            'when': datetime.now().isoformat(),
+        } for it in items]
+        body = receipts_module.format_receipt(draft)
+        preview = ('*** PREVIEW ONLY — nothing has been archived yet ***\n\n' + body)
+        self._show_text_dialog('Cleanroom Receipt — Preview', preview)
+
+    def _show_custody_trust_why(self):
+        """Drilldown for custody trust — evidence, not a fake score."""
+        if proof_module is None or ledger_module is None:
+            messagebox.showerror('Custody Trust', 'Proof modules unavailable.')
+            return
+        entries = self._load_log_dicts()
+        if not entries:
+            messagebox.showinfo('Custody Trust',
+                                'No archived actions yet.\n\n'
+                                'Custody trust measures how many logged artifacts are still '
+                                'on disk in the archive — run a cleanup first.')
+            return
+        custody = proof_module.verify_entries(entries)
+        trust = ledger_module.trust_score(custody['verified'], custody['total'])
+        lines = [
+            'CLEANROOM — CUSTODY TRUST',
+            brand.APP_MOTTO,
+            '',
+            f'Custody Trust: {trust}%',
+            f'Verified on disk: {custody["verified"]}/{custody["total"]}',
+            f'Bytes in custody: {self._format_size(custody.get("bytes_in_custody", 0))}',
+            '',
+            'This is NOT a PC health score. It is an audit of whether every item '
+            'Cleanroom logged is still present in the archive and restorable.',
+            '',
+        ]
+        if custody.get('missing'):
+            lines.append(f'Missing from archive ({custody["missing"]}):')
+            for src in custody.get('missing_items', [])[:12]:
+                lines.append(f'  • {src}')
+            if custody['missing'] > 12:
+                lines.append(f'  … and {custody["missing"] - 12} more')
+            lines.append('')
+            lines.append('Missing items may have been pruned or moved outside Cleanroom.')
+        else:
+            lines.append('All logged artifacts verified present. ✓')
+        lines.extend(['', 'View the Activity tab for the full evidence ledger.'])
+        answer = messagebox.askyesno('Custody Trust — Why?',
+                                     '\n'.join(lines) + '\n\nOpen Activity tab now?')
+        if answer:
+            self.tab_control.select(1)
+            self.refresh_activity()
+
+    def _draw_review_gauge(self, count, tone):
+        """Review-tab gauge — shows item count, not a fake health score."""
+        c = self.health_canvas
+        c.delete('all')
+        size, pad, width = 92, 9, 9
+        c.create_arc(pad, pad, size - pad, size - pad, start=0, extent=359.9,
+                     style='arc', outline=RING_BG, width=width)
+        fill = min(count, 50) / 50.0
+        if fill > 0:
+            c.create_arc(pad, pad, size - pad, size - pad, start=90,
+                         extent=-fill * 359.9, style='arc', outline=tone, width=width)
+        c.create_text(size / 2, size / 2, text=str(count), fill=TEXT,
+                      font=('Segoe UI', 18, 'bold'))
+
     def _draw_health_gauge(self, score, tone):
         c = self.health_canvas
         c.delete('all')
@@ -788,21 +977,7 @@ class StartupManagerGUI(tk.Tk):
                       font=('Segoe UI', 20, 'bold'))
 
     def _draw_health_sparkline(self, history, tone):
-        c = self.health_spark
-        c.delete('all')
-        scores = [int(h['score']) for h in history[-40:]
-                  if isinstance(h, dict) and str(h.get('score', '')).lstrip('-').isdigit()]
-        if len(scores) < 2:
-            return
-        w, h, pad = 110, 22, 2
-        lo, hi = min(scores), max(scores)
-        span = (hi - lo) or 1
-        coords = []
-        for i, s_ in enumerate(scores):
-            px = pad + i / (len(scores) - 1) * (w - 2 * pad)
-            py = (h - pad) - (s_ - lo) / span * (h - 2 * pad)
-            coords.extend((px, py))
-        c.create_line(*coords, fill=tone, width=2, smooth=True)
+        return  # retired — Cleanroom does not show fake health-score trends
 
     # ------------------------------------------------------------------
     # Disk Foresight (free-space trend + disk-full prediction)
@@ -977,7 +1152,7 @@ class StartupManagerGUI(tk.Tk):
         header = ttk.Frame(self.cleanup_tab, style='Content.TFrame')
         header.pack(fill='x', padx=10, pady=10)
         ttk.Label(header, text='Cleaner', style='Header.TLabel').pack(anchor='w')
-        ttk.Label(header, text='Scan your configured folders and archive old junk safely.',
+        ttk.Label(header, text='Scan configured folders and move reviewed files into custody.',
                   style='SubHeader.TLabel').pack(anchor='w', pady=(4, 0))
 
         summary = ttk.Frame(header, style='Content.TFrame')
@@ -993,7 +1168,7 @@ class StartupManagerGUI(tk.Tk):
         controls.pack(fill='x', padx=10, pady=(0, 6))
         self.scan_btn = ttk.Button(controls, text='Scan Now', style='Primary.TButton', command=self.refresh_cleanup)
         self.scan_btn.pack(side='left')
-        self.apply_clean_btn = ttk.Button(controls, text='Apply Cleanup', style='Action.TButton',
+        self.apply_clean_btn = ttk.Button(controls, text='Archive & Clean', style='Primary.TButton',
                                           command=self.apply_cleanup)
         self.apply_clean_btn.pack(side='left', padx=6)
         self.dedupe_check = ttk.Checkbutton(controls, text='Deduplicate', variable=self.dedupe_enabled)
@@ -1126,7 +1301,7 @@ class StartupManagerGUI(tk.Tk):
         self.preview_btn = ttk.Button(detail_actions, text='Preview (Dry-run)', style='Action.TButton',
                                       command=self.restore_selected_entry)
         self.preview_btn.pack(side='left')
-        self.apply_restore_btn = ttk.Button(detail_actions, text='Restore (Apply)', style='Primary.TButton',
+        self.apply_restore_btn = ttk.Button(detail_actions, text='Restore Now', style='Primary.TButton',
                                             command=lambda: self.restore_selected_entry(apply=True))
         self.apply_restore_btn.pack(side='left', padx=6)
         self.open_archived_btn = ttk.Button(detail_actions, text='Open Archived', style='Action.TButton',
@@ -1158,7 +1333,7 @@ class StartupManagerGUI(tk.Tk):
         body.pack(fill='both', expand=True, padx=10)
 
         # Left: scan paths
-        paths_box = ttk.Labelframe(body, text='Scan locations', style='Detail.TLabelframe')
+        paths_box = ttk.Labelframe(body, text='What Cleanroom scans', style='Detail.TLabelframe')
         paths_box.pack(side='left', fill='both', expand=True, padx=(0, 8))
         self.set_paths_list = tk.Listbox(paths_box, height=6, activestyle='dotbox',
                                          font=('Segoe UI', 10), relief='flat',
@@ -1174,7 +1349,7 @@ class StartupManagerGUI(tk.Tk):
                    command=self._settings_remove_path).pack(side='left', padx=6)
 
         # Right: thresholds & archive
-        opts_box = ttk.Labelframe(body, text='Archive & thresholds', style='Detail.TLabelframe')
+        opts_box = ttk.Labelframe(body, text='Where Cleanroom archives files', style='Detail.TLabelframe')
         opts_box.pack(side='left', fill='both', expand=True)
         grid = ttk.Frame(opts_box, style='Card.TFrame')
         grid.pack(fill='x', padx=8, pady=8)
@@ -1195,24 +1370,26 @@ class StartupManagerGUI(tk.Tk):
             ttk.Label(grid, text=label, style='CardInfo.TLabel').grid(row=row, column=0, sticky='w', pady=3)
             ttk.Spinbox(grid, from_=lo, to=hi, increment=inc, textvariable=var, width=10).grid(row=row, column=1, sticky='w', pady=3)
 
-        spin_row(1, 'Temp file age (days):', self.set_temp_age, 1, 365)
-        spin_row(2, 'Installer/archive age (days):', self.set_installer_age, 1, 3650)
+        spin_row(1, 'Temp files — archive after (days):', self.set_temp_age, 1, 365)
+        spin_row(2, 'Installers — archive after (days):', self.set_installer_age, 1, 3650)
         spin_row(3, 'Large file threshold (MB):', self.set_size_mb, 1, 1024 * 100)
-        spin_row(4, 'Confirm above (GB):', self.set_confirm_gb, 0.1, 1000, 0.5)
-        ttk.Label(grid, text='Archive extensions (comma-sep):', style='CardInfo.TLabel').grid(row=5, column=0, sticky='w', pady=3)
-        ttk.Entry(grid, textvariable=self.set_ext_var, width=38, style='Search.TEntry').grid(row=5, column=1, columnspan=2, sticky='we', pady=3)
+        spin_row(4, 'Confirm archive above (GB):', self.set_confirm_gb, 0.1, 1000, 0.5)
+        ttk.Label(grid, text='When files become safe to archive', style='CardInfo.TLabel',
+                  font=('Segoe UI', 9, 'bold')).grid(row=5, column=0, columnspan=3, sticky='w', pady=(8, 2))
+        ttk.Label(grid, text='Archive extensions (comma-sep):', style='CardInfo.TLabel').grid(row=6, column=0, sticky='w', pady=3)
+        ttk.Entry(grid, textvariable=self.set_ext_var, width=38, style='Search.TEntry').grid(row=6, column=1, columnspan=2, sticky='we', pady=3)
 
-        ttk.Label(grid, text='Theme:', style='CardInfo.TLabel').grid(row=6, column=0, sticky='w', pady=(10, 3))
+        ttk.Label(grid, text='Theme:', style='CardInfo.TLabel').grid(row=7, column=0, sticky='w', pady=(10, 3))
         self.set_theme_var = tk.StringVar(value=PALETTES[CURRENT_THEME]['LABEL'])
         theme_combo = ttk.Combobox(grid, textvariable=self.set_theme_var, state='readonly',
                                    values=[PALETTES[t]['LABEL'] for t in THEME_ORDER], width=20)
-        theme_combo.grid(row=6, column=1, sticky='w', pady=(10, 3))
+        theme_combo.grid(row=7, column=1, sticky='w', pady=(10, 3))
 
         self.set_power_var = tk.BooleanVar(value=bool(load_ui_prefs().get('power_user')))
         power_cb = ttk.Checkbutton(grid, text='Power user mode (dense lists, registry-key column)',
                                    variable=self.set_power_var)
         power_cb.configure(style='TCheckbutton')
-        power_cb.grid(row=7, column=0, columnspan=2, sticky='w', pady=(4, 3))
+        power_cb.grid(row=8, column=0, columnspan=2, sticky='w', pady=(4, 3))
 
         def _apply_ui():
             prefs = load_ui_prefs()
@@ -1227,22 +1404,22 @@ class StartupManagerGUI(tk.Tk):
             self.wants_restart = True
             self.destroy()
 
-        apply_ui_btn = ttk.Button(grid, text='Apply UI Settings', style='Action.TButton',
+        apply_ui_btn = ttk.Button(grid, text='Save UI Settings', style='Action.TButton',
                                   command=_apply_ui)
-        apply_ui_btn.grid(row=6, column=2, rowspan=2, sticky='w', padx=(6, 0), pady=(10, 3))
+        apply_ui_btn.grid(row=7, column=2, rowspan=2, sticky='w', padx=(6, 0), pady=(10, 3))
         self._add_tooltip(apply_ui_btn, 'Applies instantly — the window rebuilds with the new look.')
         grid.columnconfigure(1, weight=1)
 
         # Patterns
         patterns = ttk.Frame(self.settings_tab, style='Content.TFrame')
         patterns.pack(fill='both', expand=True, padx=10, pady=(8, 0))
-        excl_box = ttk.Labelframe(patterns, text='Exclude patterns (one per line, glob ok)', style='Detail.TLabelframe')
+        excl_box = ttk.Labelframe(patterns, text='What Cleanroom must never touch (exclude patterns)', style='Detail.TLabelframe')
         excl_box.pack(side='left', fill='both', expand=True, padx=(0, 8))
         self.set_exclude_text = tk.Text(excl_box, height=4, font=('Consolas', 9), relief='flat',
                                         bg=PREVIEW_BG, fg=TEXT, insertbackground=TEXT,
                                         highlightthickness=1, highlightbackground=BORDER)
         self.set_exclude_text.pack(fill='both', expand=True, padx=8, pady=8)
-        white_box = ttk.Labelframe(patterns, text='Whitelist (never archive, one per line)', style='Detail.TLabelframe')
+        white_box = ttk.Labelframe(patterns, text='What Cleanroom must never touch (whitelist)', style='Detail.TLabelframe')
         white_box.pack(side='left', fill='both', expand=True)
         self.set_whitelist_text = tk.Text(white_box, height=4, font=('Consolas', 9), relief='flat',
                                           bg=PREVIEW_BG, fg=TEXT, insertbackground=TEXT,
@@ -1297,7 +1474,7 @@ class StartupManagerGUI(tk.Tk):
         self.set_exclude_text.insert('1.0', '\n'.join(cfg.get('exclude_patterns', []) or []))
         self.set_whitelist_text.delete('1.0', 'end')
         self.set_whitelist_text.insert('1.0', '\n'.join(cfg.get('whitelist', []) or []))
-        self.settings_status_lbl.config(text=f'Editing: {self.cleanup_config_path}')
+        self.settings_status_lbl.config(text=self._config_status_label())
 
     def save_settings(self):
         try:
@@ -1326,7 +1503,7 @@ class StartupManagerGUI(tk.Tk):
         except Exception as e:
             messagebox.showerror('Settings', f'Unable to save settings:\n{e}')
             return
-        self.settings_status_lbl.config(text=f'Saved to {written_to}')
+        self.settings_status_lbl.config(text='Cleanroom configuration saved')
         self._set_status('Settings saved. Re-scanning with new configuration...')
         self.refresh_cleanup()
 
@@ -1474,7 +1651,6 @@ class StartupManagerGUI(tk.Tk):
             self.uninst_checked.clear()  # indices change with every rescan
             self._populate_uninstall_tree()
             self.uninst_status_lbl.config(text='')
-            self.hdr_programs_lbl.config(text=f'🗑 Programs: {len(self.uninstall_entries)}')
 
         self._run_bg(uninstaller.list_installed_programs, done)
 
@@ -2129,6 +2305,7 @@ class StartupManagerGUI(tk.Tk):
         self.cleanup_count_label.config(
             text=f'Candidates: {len(self.cleanup_items)} ({len(self.cleanup_selected)} checked)')
         self.cleanup_size_label.config(text=f'Reclaimable: {self._format_size(selected_size)} checked')
+        self._refresh_header_proof_badges()
         archive = (cfg or {}).get('archive_dir') if cfg else None
         self.cleanup_archive_label.config(text=f'Archive: {archive or "auto (next to app)"}')
 
@@ -2209,7 +2386,7 @@ class StartupManagerGUI(tk.Tk):
 
         self.apply_clean_btn.config(state='disabled')
         self.tb_apply.config(state='disabled')
-        self._set_status('Applying cleanup (archiving files)...')
+        self._set_status('Archiving files to Cleanroom archive…')
 
         def work():
             volume = proof_module.volume_of(archive_dir) if proof_module else None
@@ -2307,10 +2484,8 @@ class StartupManagerGUI(tk.Tk):
         self.stat_act_present.config(text=str(summary['present']))
         self.stat_act_bytes.config(text=self._format_size(custody['bytes_in_custody']))
         self.act_status_lbl.config(
-            text=f'Trust {trust}/100' if custody['total'] else 'Awaiting first action')
-        self.hdr_trust_lbl.config(
-            text=f'🔬 Trust: {trust}%' if custody['total'] else '🔬 Trust: —')
-        self.hdr_restorable_lbl.config(text=f'↩ Restorable: {summary["present"]}')
+            text=f'Custody trust {trust}%' if custody['total'] else 'Awaiting first action')
+        self._refresh_header_proof_badges()
 
         tree = self.activity_tree
         tree.delete(*tree.get_children())
@@ -2360,15 +2535,25 @@ class StartupManagerGUI(tk.Tk):
         dlg.grab_set()
         dlg.bind('<Escape>', lambda e: dlg.destroy())
 
+        head_row = ttk.Frame(dlg, style='Content.TFrame')
+        head_row.pack(fill='x', padx=16, pady=(12, 0))
+        logo = self._load_logo(40)
+        if logo is not None:
+            self._proof_logo = logo
+            ttk.Label(head_row, image=logo, background=BG).pack(side='left', padx=(0, 8))
+        title_col = ttk.Frame(head_row, style='Content.TFrame')
+        title_col.pack(side='left', fill='x', expand=True)
+
         c = prf.get('custody') or {}
         ok = c.get('missing', 0) == 0 and c.get('total', 0) > 0
         head_color = ACCENT if ok else SEVERITY_COLORS['medium']
         head_txt = 'CUSTODY VERIFIED ✓' if ok else 'ARCHIVED WITH PROOF'
 
-        ttk.Label(dlg, text=head_txt, font=('Segoe UI', 16, 'bold'),
-                  foreground=head_color).pack(anchor='w', padx=16, pady=(16, 4))
+        ttk.Label(title_col, text=head_txt, font=('Segoe UI', 16, 'bold'),
+                  foreground=head_color).pack(anchor='w')
+        ttk.Label(title_col, text=brand.APP_MOTTO, style='Info.TLabel').pack(anchor='w', pady=(2, 0))
         ttk.Label(dlg, text='Measured by Windows — not estimated. Every item is in the archive.',
-                  style='Info.TLabel', wraplength=520).pack(anchor='w', padx=16, pady=(0, 12))
+                  style='Info.TLabel', wraplength=520).pack(anchor='w', padx=16, pady=(8, 12))
 
         grid = ttk.Frame(dlg, style='Content.TFrame')
         grid.pack(fill='both', expand=True, padx=16, pady=(0, 8))
@@ -2491,23 +2676,23 @@ class StartupManagerGUI(tk.Tk):
         self._run_bg(lambda: proof_module.verify_entries(entries), done)
 
     # ------------------------------------------------------------------
-    # Registry Health (safe, evidence-based; archive-first repairs)
+    # Registry Snapshot (safe, evidence-based; archive-first repairs)
     # ------------------------------------------------------------------
     def open_registry_health(self):
         if registry_health is None:
-            messagebox.showerror('Registry Health', 'Registry health module unavailable.')
+            messagebox.showerror('Registry Snapshot', 'Registry snapshot module unavailable.')
             return
-        self._set_status('Scanning registry health…')
+        self._set_status('Scanning registry snapshot…')
         self.reg_health_btn.config(state='disabled')
 
         def done(result, err):
             self.reg_health_btn.config(state='normal')
             self._set_status('Ready')
             if err is not None:
-                messagebox.showerror('Registry Health', f'Scan failed: {err}')
+                messagebox.showerror('Registry Snapshot', f'Scan failed: {err}')
                 return
             if not result:
-                messagebox.showinfo('Registry Health',
+                messagebox.showinfo('Registry Snapshot',
                                     'No issues found — every startup ref, App Paths entry '
                                     'and uninstaller this scan can verify points to a real file.')
                 return
@@ -2518,13 +2703,13 @@ class StartupManagerGUI(tk.Tk):
     def _show_registry_health_dialog(self, issues):
         dlg = tk.Toplevel(self)
         dlg.configure(bg=BG)
-        dlg.title('Registry Health')
+        dlg.title('Registry Snapshot')
         dlg.geometry('720x420')
         dlg.transient(self)
         dlg.grab_set()
         dlg.bind('<Escape>', lambda e: dlg.destroy())
 
-        ttk.Label(dlg, text=f'Registry Health — {len(issues)} issue(s) found',
+        ttk.Label(dlg, text=f'Registry Snapshot — {len(issues)} issue(s) found',
                   font=('Segoe UI', 12, 'bold')).pack(anchor='w', padx=14, pady=(14, 2))
         ttk.Label(dlg, text='Only entries that verifiably point to missing files are listed. '
                             'Checked items are EXPORTED to .reg backups in the archive before '
@@ -2577,7 +2762,7 @@ class StartupManagerGUI(tk.Tk):
             def done(result, err):
                 self._set_status('Ready')
                 if err is not None:
-                    messagebox.showerror('Registry Health', f'Repair failed: {err}')
+                    messagebox.showerror('Registry Snapshot', f'Repair failed: {err}')
                     return
                 fixed = len(result or [])
                 skipped = len(chosen) - fixed
@@ -2585,7 +2770,7 @@ class StartupManagerGUI(tk.Tk):
                 if skipped:
                     msg += (f'\n{skipped} item(s) could not be removed '
                             '(HKLM entries need admin rights).')
-                messagebox.showinfo('Registry Health', msg)
+                messagebox.showinfo('Registry Snapshot', msg)
                 self.refresh_restore()
                 self.refresh_uninstaller()
 
@@ -2925,7 +3110,7 @@ class StartupManagerGUI(tk.Tk):
         self.refresh_restore()
 
     # ------------------------------------------------------------------
-    # Optimizer / recommendations
+    # Review tab / recommendations
     # ------------------------------------------------------------------
     def refresh_optimizer(self):
         folder_count = len(self.data.get('folders', []))
@@ -2938,12 +3123,6 @@ class StartupManagerGUI(tk.Tk):
             reason_counts[reason] = reason_counts.get(reason, 0) + 1
 
         if rec_engine:
-            score = rec_engine.compute_health_score(
-                startup_count=startup_count,
-                cleanup_count=cleanup_count,
-                cleanup_bytes=self.cleanup_total_size,
-                restore_count=len(self.restore_entries))
-            tone, label = rec_engine.health_band(score)
             recs = rec_engine.build_recommendations(
                 folder_count=folder_count,
                 registry_count=registry_count,
@@ -2952,25 +3131,23 @@ class StartupManagerGUI(tk.Tk):
                 restore_count=len(self.restore_entries),
                 reason_counts=reason_counts)
         else:
-            score, tone, label = 100, '#1F8A70', 'Excellent'
             recs = []
 
-        self._draw_health_gauge(score, tone)
-        self.health_band_lbl.config(text=label, fg=tone)
-        if foresight:
-            try:
-                foresight.record_health(score)
-                self._draw_health_sparkline(foresight.load_health_history(), tone)
-            except Exception:
-                pass
+        review_count = cleanup_count
+        if review_count == 0:
+            tone, band_text = ACCENT, 'Nothing pending'
+        elif review_count < 10:
+            tone, band_text = SEVERITY_COLORS['low'], f'{review_count} to archive'
+        elif review_count < 30:
+            tone, band_text = SEVERITY_COLORS['medium'], f'{review_count} to archive'
+        else:
+            tone, band_text = SEVERITY_COLORS['high'], f'{review_count} to archive'
+
+        self._draw_review_gauge(review_count, tone)
+        self.health_band_lbl.config(text=band_text, fg=tone)
         self.stat_startup_value.config(text=str(startup_count))
         self.stat_cleanup_value.config(text=str(cleanup_count))
         self.stat_size_value.config(text=self._format_size(self.cleanup_total_size))
-        self.hdr_health_lbl.config(text=f'❤ Health: {score}')
-        self.hdr_startup_lbl.config(text=f'🚀 Startup: {startup_count}')
-        self.hdr_reclaim_lbl.config(
-            text=f'🧹 Reclaimable: {self._format_size(self.cleanup_total_size)}')
-        self.hdr_restorable_lbl.config(text=f'↩ Restorable: {len(self.restore_entries)}')
 
         self.rec_tree.delete(*self.rec_tree.get_children())
         for r in recs:
@@ -2979,6 +3156,7 @@ class StartupManagerGUI(tk.Tk):
                                  tags=(r['severity'],))
 
         self.refresh_foresight()
+        self._refresh_header_proof_badges()
 
         try:
             if enable_telemetry and enable_telemetry.is_opted_in():
@@ -3018,15 +3196,15 @@ class StartupManagerGUI(tk.Tk):
 
         dialog = tk.Toplevel(self)
         dialog.configure(bg=BG)
-        dialog.title('Schedule Optimization')
+        dialog.title('Schedule Cleanup')
         dialog.geometry('420x360')
         dialog.resizable(False, False)
         dialog.transient(self)
         dialog.grab_set()
         dialog.bind('<Escape>', lambda e: dialog.destroy())
 
-        ttk.Label(dialog, text='Schedule recurring optimization', font=('Segoe UI', 12, 'bold')).pack(anchor='w', padx=16, pady=(14, 2))
-        ttk.Label(dialog, text='Creates a Windows scheduled task that runs the cleaner non-interactively.',
+        ttk.Label(dialog, text='Schedule recurring cleanup', font=('Segoe UI', 12, 'bold')).pack(anchor='w', padx=16, pady=(14, 2))
+        ttk.Label(dialog, text='Creates a Windows scheduled task named CleanroomDaily that runs Cleanroom non-interactively.',
                   style='Info.TLabel', wraplength=380).pack(anchor='w', padx=16, pady=(0, 10))
 
         # Time picker

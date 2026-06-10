@@ -38,6 +38,7 @@ def format_receipt(moved_entries, days_bought=None, now=None, proof=None):
     lines = [
         '=' * 46,
         '         CLEANROOM — RECEIPT',
+        f'  {brand.APP_MOTTO}',
         '=' * 46,
         f'  Date:        {now.strftime("%Y-%m-%d %H:%M:%S")}',
         f'  Items moved: {len(moved_entries)}',

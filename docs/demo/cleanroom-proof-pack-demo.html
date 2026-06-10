@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Cleanroom Proof Pack — 2026-06-10 17:04:16</title>
+<style>
+  :root { --bg:#0f1419; --card:#1a2332; --text:#e7ecef; --muted:#94a3b8;
+           --accent:#22c55e; --bad:#f87171; --border:#334155; }
+  * { box-sizing:border-box; }
+  body { font-family:Segoe UI,system-ui,sans-serif; background:var(--bg);
+          color:var(--text); margin:0; padding:32px; line-height:1.5; }
+  h1 { font-size:1.75rem; margin:0 0 4px; }
+  .sub { color:var(--muted); margin-bottom:24px; }
+  .hero { background:var(--card); border:1px solid var(--border); border-radius:12px;
+           padding:24px; margin-bottom:20px; }
+  .status { font-size:1.4rem; font-weight:700; color:#22c55e; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:12px; margin-top:16px; }
+  .stat { background:#121820; border-radius:8px; padding:14px; text-align:center; }
+  .stat b { display:block; font-size:1.5rem; }
+  .stat span { color:var(--muted); font-size:0.8rem; }
+  table { width:100%; border-collapse:collapse; font-size:0.85rem; }
+  th,td { padding:8px 10px; border-bottom:1px solid var(--border); text-align:left; }
+  th { color:var(--muted); font-weight:600; }
+  .mono { font-family:Consolas,monospace; font-size:0.75rem; word-break:break-all; }
+  .ok { color:var(--accent); font-weight:bold; }
+  .bad { color:var(--bad); font-weight:bold; }
+  .muted { color:var(--muted); }
+  ul.reasons { list-style:none; padding:0; }
+  ul.reasons li { display:flex; justify-content:space-between; padding:6px 0;
+                    border-bottom:1px solid var(--border); }
+  .footer { margin-top:24px; color:var(--muted); font-size:0.8rem; }
+  .compare { background:#121820; border-radius:8px; padding:16px; margin-top:16px; }
+  .compare li { margin:6px 0; }
+</style>
+</head>
+<body>
+<h1>Cleanroom — Proof Pack</h1>
+<p class="sub">Generated 2026-06-10 17:04:16 · v1.0.0 · independently verifiable</p>
+
+<div class="hero">
+  <div class="status">CUSTODY VERIFIED</div>
+  <p>Trust score: <strong>100/100</strong> — 5/5 archived
+     artifacts verified on disk (3.7 GB in custody).</p>
+  <div class="grid">
+    <div class="stat"><b>5</b><span>Actions logged</span></div>
+    <div class="stat"><b>5</b><span>Restorable now</span></div>
+    <div class="stat"><b>0</b><span>Missing from archive</span></div>
+    <div class="stat"><b>3.7 GB</b><span>Bytes moved (logged)</span></div>
+  </div>
+  <div class="compare">
+    <strong>Why this matters</strong>
+    <ul>
+      <li>Other optimizers: &ldquo;Fixed 1,247 registry errors!&rdquo; — no proof, no undo.</li>
+      <li>Cleanroom: every row below is a real file or registry export you can restore.</li>
+      <li>Missing rows usually mean you pruned the archive or changed files outside the app.</li>
+    </ul>
+  </div>
+</div>
+
+<div class="hero">
+  <h2 style="margin-top:0;font-size:1.1rem;">By reason</h2>
+  <ul class="reasons"><li><span>large-file</span><strong>1</strong></li><li><span>temp</span><strong>1</strong></li><li><span>partial-download</span><strong>1</strong></li><li><span>installer/archive</span><strong>1</strong></li><li><span>broken-registry</span><strong>1</strong></li></ul>
+</div>
+
+<div class="hero">
+  <h2 style="margin-top:0;font-size:1.1rem;">Activity log (newest first, max 500)</h2>
+  <table>
+    <thead><tr><th></th><th>When</th><th>Reason</th><th>Source</th><th>Size</th></tr></thead>
+    <tbody><tr><td class="ok">✓</td><td>2026-06-10 14:22:11</td><td>large-file</td><td class="mono">C:\Users\Demo\Downloads\installer_backup.msi</td><td>2.0 GB</td></tr><tr><td class="ok">✓</td><td>2026-06-10 14:22:12</td><td>temp</td><td class="mono">C:\Users\Demo\AppData\Local\Temp\setup_cache.zip</td><td>500.0 MB</td></tr><tr><td class="ok">✓</td><td>2026-06-10 14:22:13</td><td>partial-download</td><td class="mono">C:\Users\Demo\Downloads\video.crdownload</td><td>1.0 GB</td></tr><tr><td class="ok">✓</td><td>2026-06-10 14:22:14</td><td>installer/archive</td><td class="mono">C:\Users\Demo\Downloads\old_setup.exe</td><td>256.0 MB</td></tr><tr><td class="ok">✓</td><td>2026-06-10 14:22:15</td><td>broken-registry</td><td class="mono">REGISTRY::HKCU\Software\Demo\DeadRun</td><td>4.0 KB</td></tr></tbody>
+  </table>
+</div>
+
+<p class="footer">Cleanroom never permanently deletes during normal cleanup — items are archived
+or exported to .reg backups. Open the Restore tab or Cleanroom Rewind to roll back.
+This report was generated locally; no data left your PC.</p>
+</body>
+</html>

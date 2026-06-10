@@ -33,12 +33,16 @@ Repository: [`cleanroom-windows`](https://github.com/YOUR_USER/cleanroom-windows
 
 | Feature | What it does |
 |---------|----------------|
-| **Cleanroom** | Main app — optimizer, cleaner, uninstaller, startup, registry health |
+| **Cleanroom** | Main app — review, cleaner, uninstaller, startup, registry snapshot |
 | **Cleanroom Receipt** | Itemized proof after every cleanup |
 | **Cleanroom Archive** | Where moved files and `.reg` exports live |
 | **Cleanroom Rewind** | Undo an entire day of actions |
 | **Custody Trust Score** | 0–100 — % of archived artifacts verified on disk |
 | **Proof Pack (HTML)** | Shareable audit report for your full history |
+
+For README and launch screenshots, open the bundled demo Proof Pack (100% custody verified — not a gaps-detected example):
+
+[`docs/demo/cleanroom-proof-pack-demo.html`](docs/demo/cleanroom-proof-pack-demo.html)
 
 ---
 

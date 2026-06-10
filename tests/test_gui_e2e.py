@@ -305,7 +305,7 @@ def test_settings_tab_roundtrips_config(sandbox):
     app.set_temp_age.set(14)
     app.set_exclude_text.insert('end', '\n*.keepme')
     app.save_settings()
-    assert pump(app, lambda: 'Saved to' in app.settings_status_lbl.cget('text'))
+    assert pump(app, lambda: 'saved' in app.settings_status_lbl.cget('text').lower())
 
     saved = yaml_mod.safe_load(Path(app.cleanup_config_path).read_text(encoding='utf-8'))
     assert saved['size_threshold_mb'] == 50

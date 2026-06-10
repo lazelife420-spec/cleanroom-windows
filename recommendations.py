@@ -72,8 +72,9 @@ def build_recommendations(folder_count=0, registry_count=0, cleanup_count=0,
             sev = 'low'
         recs.append({
             'severity': sev,
-            'title': f'Archive {cleanup_count} cleanup candidate(s)',
-            'detail': f'Reclaim {_human_size(cleanup_bytes)} by archiving old junk. Files are moved, not deleted, and can be restored.',
+            'title': f'Archive {cleanup_count} reviewed candidate(s)',
+            'detail': (f'Reclaim {_human_size(cleanup_bytes)} by moving reviewed files into custody. '
+                       'Nothing is deleted — every move is logged and restorable.'),
         })
     else:
         recs.append({
@@ -121,8 +122,8 @@ def build_recommendations(folder_count=0, registry_count=0, cleanup_count=0,
     if cleanup_count >= 20:
         recs.append({
             'severity': 'medium',
-            'title': 'Schedule automatic optimization',
-            'detail': 'Junk is accumulating quickly. A daily or weekly scheduled run keeps it under control.',
+            'title': 'Schedule automatic cleanup',
+            'detail': 'Reviewed files are accumulating — schedule regular archive runs to keep custody current.',
         })
 
     if restore_count == 0:
