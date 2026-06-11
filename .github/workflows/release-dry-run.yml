@@ -1,22 +1,25 @@
-name: Release
+name: Release Dry Run
 
 on:
-  push:
-    tags:
-      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version override (default: brand.APP_VERSION)'
+        required: false
+        default: ''
 
 concurrency:
-  group: release-${{ github.ref }}
-  cancel-in-progress: false
+  group: release-dry-run
+  cancel-in-progress: true
 
 permissions:
-  contents: write
+  contents: read
   attestations: write
   id-token: write
 
 jobs:
-  release:
-    name: Release
+  dry-run:
+    name: Release Dry Run
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v6
@@ -34,16 +37,20 @@ jobs:
       - name: Install dependencies
         run: python -m pip install -r requirements.txt
 
-      - name: Resolve version from tag
+      - name: Resolve version
         id: ver
         shell: bash
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
+          if [[ -n "${{ inputs.version }}" ]]; then
+            VERSION="${{ inputs.version }}"
+          else
+            VERSION=$(python -c "import brand; print(brand.APP_VERSION)")
+          fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "Release tag ${GITHUB_REF_NAME} -> v$VERSION"
+          echo "Dry-run release for Cleanroom v$VERSION"
 
-      - name: Verify tag matches brand and release notes
-        run: python scripts/verify_release_surface.py --tag "${{ github.ref_name }}"
+      - name: Verify release surface and tag alignment
+        run: python scripts/verify_release_surface.py --tag "v${{ steps.ver.outputs.version }}"
 
       - name: Run full test suite
         run: python -m pytest tests/ -p no:xonsh -q
@@ -55,7 +62,7 @@ jobs:
         run: |
           winget install --id JRSoftware.InnoSetup --exact --silent --accept-package-agreements --accept-source-agreements
 
-      - name: Build installer from tag
+      - name: Build installer
         run: |
           powershell -NoProfile -ExecutionPolicy Bypass -File build_installer.ps1 -Version "${{ steps.ver.outputs.version }}"
 
@@ -64,13 +71,7 @@ jobs:
         env:
           SIGNING_CERT_BASE64: ${{ secrets.SIGNING_CERT_BASE64 }}
           SIGNING_CERT_PASSWORD: ${{ secrets.SIGNING_CERT_PASSWORD }}
-        run: |
-          if ($env:SIGNING_CERT_BASE64) {
-            Write-Host 'Signing release artifacts.'
-          } else {
-            Write-Host '::notice::Unsigned release - set SIGNING_CERT_BASE64 to enable code signing.'
-          }
-          ./scripts/sign_release_artifacts.ps1
+        run: ./scripts/sign_release_artifacts.ps1
 
       - name: Generate demo Proof Pack
         run: python scripts/generate_demo_proof_pack.py
@@ -79,17 +80,17 @@ jobs:
         continue-on-error: true
         run: python scripts/capture_launch_screenshots.py
 
-      - name: Validate release surface and screenshots
-        run: python scripts/verify_release_surface.py --tag "${{ github.ref_name }}"
+      - name: Validate screenshots
+        run: python scripts/verify_release_surface.py --tag "v${{ steps.ver.outputs.version }}"
 
-      - name: Generate SHA256SUMS from build artifacts
+      - name: Generate SHA256SUMS
         run: python scripts/generate_sha256sums.py --version "${{ steps.ver.outputs.version }}"
 
       - name: Verify checksums and tag alignment
         run: |
-          python scripts/verify_release_surface.py --verify-checksums --verify-artifacts --tag "${{ github.ref_name }}" --version "${{ steps.ver.outputs.version }}"
+          python scripts/verify_release_surface.py --verify-checksums --verify-artifacts --tag "v${{ steps.ver.outputs.version }}" --version "${{ steps.ver.outputs.version }}"
 
-      - name: Attest release artifact provenance
+      - name: Attest release artifact provenance (dry run)
         uses: actions/attest-build-provenance@v2
         with:
           subject-path: |
@@ -99,38 +100,30 @@ jobs:
             assets/screenshots/cleanroom-activity-ledger.png
             assets/screenshots/cleanroom-proof-pack-demo.png
 
-      - name: Create GitHub Release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          TAG="${{ github.ref_name }}"
-          VERSION="${{ steps.ver.outputs.version }}"
-          NOTES="docs/RELEASE-v${VERSION}.md"
-          INSTALLER="dist/Cleanroom-Setup-${VERSION}.exe"
-
-          if [[ ! -f "$INSTALLER" ]]; then
-            echo "Installer not found: $INSTALLER"
-            exit 1
-          fi
-
-          ASSETS=(
-            "$INSTALLER"
+      - name: Upload dry-run artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-dry-run-v${{ steps.ver.outputs.version }}
+          path: |
+            dist/Cleanroom/**
+            dist/Cleanroom-Setup-*.exe
             SHA256SUMS.txt
             assets/screenshots/cleanroom-review.png
             assets/screenshots/cleanroom-activity-ledger.png
             assets/screenshots/cleanroom-proof-pack-demo.png
             docs/demo/cleanroom-proof-pack-demo.html
-          )
+          if-no-files-found: error
 
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release edit "$TAG" --title "Cleanroom v${VERSION} — Proof-first Windows cleanup with rollback" --notes-file "$NOTES"
-            gh release upload "$TAG" "${ASSETS[@]}" --clobber
-            echo "Updated existing release $TAG with tag-built artifacts."
-          else
-            gh release create "$TAG" \
-              --title "Cleanroom v${VERSION} — Proof-first Windows cleanup with rollback" \
-              --notes-file "$NOTES" \
-              "${ASSETS[@]}"
-            echo "Created release $TAG from tag commit."
-          fi
+      - name: Dry-run summary
+        shell: bash
+        run: |
+          VERSION="${{ steps.ver.outputs.version }}"
+          echo "## Release dry-run passed for v${VERSION}" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Attestable artifacts:" >> "$GITHUB_STEP_SUMMARY"
+          echo "- dist/Cleanroom-Setup-${VERSION}.exe" >> "$GITHUB_STEP_SUMMARY"
+          echo "- SHA256SUMS.txt" >> "$GITHUB_STEP_SUMMARY"
+          echo "- assets/screenshots/*.png" >> "$GITHUB_STEP_SUMMARY"
+          echo "- docs/demo/cleanroom-proof-pack-demo.html" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "No GitHub Release was created. Tag v${VERSION} when ready." >> "$GITHUB_STEP_SUMMARY"

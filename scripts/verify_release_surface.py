@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 REPO = 'Z3r0DayZion-install/cleanroom-windows'
 
 PUBLIC_DOC_GLOBS = ('README.md', 'docs/RELEASE-v*.md')
@@ -255,29 +256,71 @@ def verify_checksums(version: str | None = None) -> bool:
     return ok
 
 
-def verify_tag_version(tag: str | None) -> bool:
-    if not tag:
-        return True
+def verify_tag_alignment(tag: str, *, verify_artifacts: bool = False) -> bool:
+    """Fail if tag, brand version, docs, README URLs, or artifacts drift."""
     import brand  # noqa: WPS433
 
     version = tag.lstrip('vV')
+    ok = True
+    url_needle = f'releases/download/v{version}/'
+    installer_name = f'Cleanroom-Setup-{version}.exe'
+
     if brand.APP_VERSION != version:
         _fail(f'Tag {tag!r} ({version}) does not match brand.APP_VERSION={brand.APP_VERSION!r}')
-        return False
+        ok = False
+
     notes = ROOT / 'docs' / f'RELEASE-v{version}.md'
     if not notes.is_file():
         _fail(f'Missing release notes for tag: {notes.name}')
-        return False
-    _ok(f'Tag {tag} matches brand.APP_VERSION and release notes exist')
-    return True
+        ok = False
+    else:
+        notes_text = notes.read_text(encoding='utf-8')
+        if url_needle not in notes_text:
+            _fail(f'{notes.name} must use {url_needle} screenshot URLs')
+            ok = False
+        if installer_name not in notes_text:
+            _fail(f'{notes.name} must reference {installer_name}')
+            ok = False
+
+    readme = ROOT / 'README.md'
+    if readme.is_file():
+        readme_text = readme.read_text(encoding='utf-8')
+        if url_needle not in readme_text:
+            _fail(f'README.md must link screenshots to {url_needle}')
+            ok = False
+        if installer_name not in readme_text:
+            _fail(f'README.md must reference {installer_name} for provenance docs')
+            ok = False
+
+    sums = ROOT / 'SHA256SUMS.txt'
+    if sums.is_file():
+        lines = sums.read_text(encoding='utf-8').splitlines()
+        if lines and f'v{version}' not in lines[0]:
+            _fail(f'SHA256SUMS.txt header must reference v{version}')
+            ok = False
+
+    if verify_artifacts:
+        installer = ROOT / 'dist' / installer_name
+        if not installer.is_file():
+            _fail(f'Expected installer artifact: dist/{installer_name}')
+            ok = False
+        if sums.is_file() and installer_name not in sums.read_text(encoding='utf-8'):
+            _fail(f'SHA256SUMS.txt must list {installer_name}')
+            ok = False
+
+    if ok:
+        _ok(f'Tag {tag} alignment verified (brand, docs, README, checksums)')
+    return ok
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--verify-checksums', action='store_true',
                         help='Require dist/ artifacts and validate SHA256SUMS.txt')
-    parser.add_argument('--tag', default='', help='Release tag (e.g. v1.0.0) for version alignment')
-    parser.add_argument('--version', default='', help='Release version (e.g. 1.0.0)')
+    parser.add_argument('--tag', default='', help='Release tag (e.g. v1.0.1) for version alignment')
+    parser.add_argument('--version', default='', help='Release version (e.g. 1.0.1)')
+    parser.add_argument('--verify-artifacts', action='store_true',
+                        help='Require dist/ installer matching tag version')
     args = parser.parse_args()
 
     results = [
@@ -288,7 +331,7 @@ def main() -> int:
         scan_forbidden_ui_labels(),
     ]
     if args.tag:
-        results.append(verify_tag_version(args.tag))
+        results.append(verify_tag_alignment(args.tag, verify_artifacts=args.verify_artifacts))
     if args.verify_checksums:
         version = args.version or (args.tag.lstrip('vV') if args.tag else None)
         results.append(verify_checksums(version))

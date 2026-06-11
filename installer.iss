@@ -3,7 +3,7 @@
 ; Requires dist\Cleanroom\Cleanroom.exe (run build_exe.ps1 first)
 
 #define AppName "Cleanroom"
-#define AppVersion "1.0.0"
+#define AppVersion "1.0.1"
 #define AppPublisher "Cleanroom"
 #define AppExeName "Cleanroom.exe"
 

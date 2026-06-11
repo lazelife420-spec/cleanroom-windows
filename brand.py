@@ -14,7 +14,7 @@ REPO_NAME = 'cleanroom-windows'
 DATA_DIR_NAME = 'Cleanroom'
 LEGACY_DATA_DIR_NAME = 'SmartClean'  # Smart Clean → Cleanroom upgrade path
 EXE_NAME = 'Cleanroom'
-APP_VERSION = '1.0.0'
+APP_VERSION = '1.0.1'
 MIGRATION_RECEIPT_NAME = 'migration_receipt.txt'
 
 _ROOT = Path(__file__).resolve().parent
