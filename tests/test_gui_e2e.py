@@ -37,7 +37,10 @@ def _display_available():
         return False
 
 
-pytestmark = pytest.mark.skipif(not _display_available(), reason='No display available for Tk')
+pytestmark = pytest.mark.skipif(
+    os.environ.get('GITHUB_ACTIONS') == 'true' or not _display_available(),
+    reason='GUI e2e runs locally; CI uses screenshot capture gate instead',
+)
 
 
 def make_old(path, days):
