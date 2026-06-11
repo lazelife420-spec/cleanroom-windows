@@ -51,6 +51,10 @@ foreach ($ps1 in @('register_task.ps1', 'run_scheduled.ps1')) {
     if (Test-Path $p) { $opts += @('--add-data', "${p};.") }
 }
 
+# CustomTkinter themes/assets — required for packaged EXE (no runtime download)
+$opts += @('--collect-all', 'customtkinter')
+$opts += @('--copy-metadata', 'customtkinter')
+
 $opts += $absScript
 
 Write-Host "Running PyInstaller with: PyInstaller $($opts -join ' ')"

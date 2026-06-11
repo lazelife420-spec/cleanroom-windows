@@ -61,6 +61,7 @@ def pump(app, cond, timeout=15.0):
 
 @pytest.fixture
 def sandbox(tmp_path, monkeypatch):
+    monkeypatch.setenv('CLEANROOM_DISABLE_ANIMATIONS', '1')
     scan_dir = tmp_path / 'scan'
     scan_dir.mkdir()
     archive_dir = tmp_path / 'archive'
@@ -203,7 +204,7 @@ def test_apply_writes_receipt_with_proof_and_custody_verifies(sandbox):
     app.refresh_activity()
     assert len(app.activity_tree.get_children()) == 2
     assert app.stat_act_present.cget('text') == '2'
-    assert '100' in app.hdr_trust_lbl.cget('text')
+    assert '100' in app.hdr_trust_value.cget('text')
 
     # Verify Custody tool over the whole history reports everything present
     app.verify_custody()

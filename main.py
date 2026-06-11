@@ -78,19 +78,19 @@ def generate_default_config(dest):
 
 
 def default_config_path():
-    """Config discovery order:
-    1. cleanup_config.yaml next to the exe/script (editable, ships with installer)
-    2. per-user copy in %LOCALAPPDATA%\\Cleanroom (legacy: SmartClean)
-    3. frozen first run: generate the per-user copy from %USERPROFILE% defaults
-    4. bundled copy inside the PyInstaller extraction dir
+    """Config discovery order.
+
+    Installed (frozen): always use per-user %LOCALAPPDATA%\\Cleanroom config.
+    Generate from %USERPROFILE% on first run — never dev hardcoded paths shipped
+    next to the exe.
+
+    Dev (source): cleanup_config.yaml next to main.py, then per-user fallback.
     """
-    candidate = _app_dir() / 'cleanup_config.yaml'
-    if candidate.exists():
-        return candidate
     user_cfg = user_config_dir() / 'cleanup_config.yaml'
-    if user_cfg.exists():
-        return user_cfg
+
     if getattr(sys, 'frozen', False):
+        if user_cfg.exists():
+            return user_cfg
         try:
             generate_default_config(user_cfg)
             return user_cfg
@@ -98,6 +98,13 @@ def default_config_path():
             bundled = Path(getattr(sys, '_MEIPASS', '')) / 'cleanup_config.yaml'
             if bundled.exists():
                 return bundled
+        return user_cfg
+
+    candidate = _app_dir() / 'cleanup_config.yaml'
+    if candidate.exists():
+        return candidate
+    if user_cfg.exists():
+        return user_cfg
     return candidate
 
 

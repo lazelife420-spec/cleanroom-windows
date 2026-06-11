@@ -35,6 +35,31 @@ def write_config(tmp_path, scan_dir, archive_dir, log_path):
     return cfg_path
 
 
+def test_frozen_default_config_prefers_user_profile(tmp_path, monkeypatch):
+    """Installed exe must not use dev hardcoded paths from repo cleanup_config.yaml."""
+    import brand
+    profile = tmp_path / 'WDAGUtilityAccount'
+    profile.mkdir()
+    monkeypatch.setenv('USERPROFILE', str(profile))
+    monkeypatch.setenv('LOCALAPPDATA', str(profile / 'AppData' / 'Local'))
+    monkeypatch.setenv('TEMP', str(profile / 'AppData' / 'Local' / 'Temp'))
+    fake_local = profile / 'AppData' / 'Local' / 'Cleanroom'
+    monkeypatch.setattr(brand, 'user_data_dir', lambda: fake_local)
+    monkeypatch.setattr(cleanup_main, 'user_config_dir', lambda: fake_local)
+    monkeypatch.setattr(cleanup_main.sys, 'frozen', True, raising=False)
+    dev_cfg = tmp_path / 'install' / 'cleanup_config.yaml'
+    dev_cfg.parent.mkdir(parents=True)
+    dev_cfg.write_text('paths:\n  - C:\\Users\\KickA\\Downloads\n', encoding='utf-8')
+    monkeypatch.setattr(cleanup_main, '_app_dir', lambda: dev_cfg.parent)
+
+    path = cleanup_main.default_config_path()
+    assert path == fake_local / 'cleanup_config.yaml'
+    assert path.exists()
+    parsed = yaml.safe_load(path.read_text(encoding='utf-8'))
+    assert any(str(p).startswith(str(profile)) for p in parsed['paths'])
+    assert r'C:\Users\KickA\Downloads' not in [str(p) for p in parsed['paths']]
+
+
 def test_generate_default_config(tmp_path):
     dest = tmp_path / 'Cleanroom' / 'cleanup_config.yaml'
     written = cleanup_main.generate_default_config(dest)

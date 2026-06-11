@@ -11,6 +11,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / 'assets' / 'screenshots'
+# Release screenshots: fixed window size (not maximized ultra-wide)
+RELEASE_WIDTH = 1280
+RELEASE_HEIGHT = 760
 sys.path.insert(0, str(ROOT))
 
 from PIL import ImageGrab  # noqa: E402
@@ -33,6 +36,9 @@ def _grab_window(app, path: Path):
     x, y = app.winfo_rootx(), app.winfo_rooty()
     w, h = app.winfo_width(), app.winfo_height()
     img = ImageGrab.grab(bbox=(x, y, x + w, y + h))
+    if img.size != (RELEASE_WIDTH, RELEASE_HEIGHT):
+        from PIL import Image as PILImage
+        img = img.resize((RELEASE_WIDTH, RELEASE_HEIGHT), PILImage.LANCZOS)
     path.parent.mkdir(parents=True, exist_ok=True)
     img.save(path)
     print(f'Wrote {path} ({img.size[0]}x{img.size[1]})')
@@ -65,6 +71,7 @@ def _seed_demo_log(scan: Path, archive: Path, log_path: Path):
 
 
 def capture_gui_screenshots():
+    os.environ['CLEANROOM_DISABLE_ANIMATIONS'] = '1'
     import receipts as receipts_module
     import foresight as foresight_module
     import startup_manager_gui as gui_module
@@ -103,10 +110,12 @@ def capture_gui_screenshots():
     foresight_module.HEALTH_PATH = tmp / 'health_history.json'
 
     app = gui_module.StartupManagerGUI(config_path=cfg, restore_log_path=log_path)
-    try:
-        app.state('zoomed')
-    except Exception:
-        app.geometry(f'{app.winfo_screenwidth()}x860')
+    app.geometry(f'{RELEASE_WIDTH}x{RELEASE_HEIGHT}')
+    app.update_idletasks()
+    sw, sh = app.winfo_screenwidth(), app.winfo_screenheight()
+    x = max(0, (sw - RELEASE_WIDTH) // 2)
+    y = max(0, (sh - RELEASE_HEIGHT) // 2)
+    app.geometry(f'{RELEASE_WIDTH}x{RELEASE_HEIGHT}+{x}+{y}')
     app.update()
 
     # Review tab — must include toolbar: Scan / Preview Receipt / Archive & Clean / Restore
