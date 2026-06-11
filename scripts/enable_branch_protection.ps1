@@ -19,9 +19,7 @@ $body = @{
         contexts = $checks
     }
     enforce_admins                 = $true
-    required_pull_request_reviews  = @{
-        required_approving_review_count = 0
-    }
+    required_pull_request_reviews  = $null
     restrictions                   = $null
     allow_force_pushes             = $false
     allow_deletions                = $false
