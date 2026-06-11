@@ -4,11 +4,11 @@ This is not a fake "1,247 issues fixed" optimizer. Cleanroom produces receipts, 
 
 ## Screenshots (proof-loop UI)
 
-![Cleanroom Review](https://raw.githubusercontent.com/Z3r0DayZion-install/cleanroom-windows/main/assets/screenshots/cleanroom-review.png)
+![Cleanroom Review](https://github.com/Z3r0DayZion-install/cleanroom-windows/releases/download/v1.0.0/cleanroom-review.png)
 
-![Cleanroom Activity Ledger](https://raw.githubusercontent.com/Z3r0DayZion-install/cleanroom-windows/main/assets/screenshots/cleanroom-activity-ledger.png)
+![Cleanroom Activity Ledger](https://github.com/Z3r0DayZion-install/cleanroom-windows/releases/download/v1.0.0/cleanroom-activity-ledger.png)
 
-![Cleanroom Proof Pack — CUSTODY VERIFIED 100/100](https://raw.githubusercontent.com/Z3r0DayZion-install/cleanroom-windows/main/assets/screenshots/cleanroom-proof-pack-demo.png)
+![Cleanroom Proof Pack — CUSTODY VERIFIED 100/100](https://github.com/Z3r0DayZion-install/cleanroom-windows/releases/download/v1.0.0/cleanroom-proof-pack-demo.png)
 
 ## Highlights
 

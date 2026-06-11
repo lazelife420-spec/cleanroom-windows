@@ -121,6 +121,11 @@ def capture_gui_screenshots():
     app.refresh_optimizer()
     app.update()
     time.sleep(0.4)
+    for btn, label in ((app.tb_scan, 'Scan'), (app.tb_preview, 'Preview Receipt'),
+                       (app.tb_apply, 'Archive & Clean'), (app.tb_restore, 'Restore')):
+        text = btn.cget('text')
+        if label not in text:
+            raise SystemExit(f'Toolbar missing {label!r}: got {text!r}')
     _grab_window(app, OUT / 'cleanroom-review.png')
 
     # Activity tab — verified custody
