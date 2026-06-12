@@ -437,6 +437,22 @@ class StartupManagerGUI(ctk.CTk):
             self.ctx_desc_lbl.configure(wraplength=wrap)
         if hasattr(self, 'ctx_next_lbl'):
             self.ctx_next_lbl.configure(wraplength=max(320, w - 380))
+        if hasattr(self, '_hdr_tagline_lbl'):
+            self._hdr_tagline_lbl.configure(wraplength=max(360, w - 80))
+        if hasattr(self, '_hdr_summary') and hasattr(self, '_hdr_hero'):
+            if w < 1180:
+                self._hdr_badges.grid(row=0, column=0, columnspan=2, sticky='nw')
+                self._hdr_hero.grid(row=1, column=0, sticky='nw', padx=0, pady=(8, 0))
+            else:
+                self._hdr_badges.grid(row=0, column=0, sticky='nw')
+                self._hdr_hero.grid(row=0, column=1, sticky='ne', padx=(16, 0), pady=0)
+        self._layout_restore_split(w)
+        preview_w = max(240, min(360, int(max(w - 280, 640) * 0.34)))
+        if hasattr(self, '_restore_preview_panel'):
+            self._restore_preview_panel.configure(width=preview_w)
+        for attr in ('restore_detail_src', 'restore_detail_dest'):
+            if hasattr(self, attr):
+                getattr(self, attr).configure(wraplength=max(180, preview_w - 24))
         if hasattr(self, 'detail_hint'):
             self.detail_hint.configure(wraplength=max(400, w - 360))
         wrap = max(420, w - 340)
@@ -444,6 +460,32 @@ class StartupManagerGUI(ctk.CTk):
                      'uninst_detail_need', 'uninst_detail_uninst'):
             if hasattr(self, attr):
                 getattr(self, attr).configure(wraplength=wrap)
+
+    def _layout_restore_split(self, window_width):
+        if not hasattr(self, '_restore_frame'):
+            return
+        try:
+            content_w = self.tab_control.winfo_width()
+        except Exception:
+            content_w = max(window_width - 260, 640)
+        mode = 'stacked' if content_w < 980 else 'wide'
+        if mode == getattr(self, '_restore_split_mode', 'wide'):
+            return
+        self._restore_split_mode = mode
+        left = self._restore_left
+        right = self._restore_preview_panel
+        left.pack_forget()
+        right.pack_forget()
+        if mode == 'stacked':
+            left.pack(fill='both', expand=True)
+            right.configure(width=max(280, content_w - 40))
+            right.pack(fill='x', pady=(8, 0))
+            right.pack_propagate(True)
+        else:
+            right.configure(width=max(260, min(360, int(content_w * 0.34))))
+            left.pack(side='left', fill='both', expand=True)
+            right.pack(side='left', fill='y', padx=(8, 0))
+            right.pack_propagate(False)
 
     # ------------------------------------------------------------------
     # Styling
@@ -589,8 +631,35 @@ class StartupManagerGUI(ctk.CTk):
     def _build_header(self):
         top = ctk_theme.frame(self, BG)
         top.pack(fill='x', padx=12, pady=(10, 4))
+
+        toolbar = ctk_theme.frame(top, BG)
+        toolbar.pack(fill='x', anchor='e', pady=(0, 8))
+        toolbar_inner = ctk_theme.frame(toolbar, BG)
+        toolbar_inner.pack(side='right')
+        self.tb_scan = ctk_theme.button(
+            toolbar_inner, '🔍 Scan', self.refresh_cleanup,
+            fg_color=HEAD_BG, hover_color=ACCENT_SOFT, text_color=TEXT)
+        self.tb_scan.pack(side='left', padx=4)
+        self.tb_preview = ctk_theme.button(
+            toolbar_inner, '🧾 Preview Receipt', self.preview_cleanup_receipt,
+            fg_color=HEAD_BG, hover_color=ACCENT_SOFT, text_color=TEXT)
+        self.tb_preview.pack(side='left', padx=4)
+        self.tb_apply = ctk_theme.button(
+            toolbar_inner, '🗂 Archive & Clean', self.apply_cleanup,
+            fg_color=ACCENT, hover_color=ACCENT_DARK, text_color=ON_ACCENT, primary=True)
+        self.tb_apply.pack(side='left', padx=4)
+        self.tb_restore = ctk_theme.button(
+            toolbar_inner, '↩ Restore',
+            lambda: (self.tab_control.select(5), self.refresh_restore()),
+            fg_color=HEAD_BG, hover_color=ACCENT_SOFT, text_color=TEXT)
+        self.tb_restore.pack(side='left', padx=4)
+        theme_btn = ctk_theme.button(
+            toolbar_inner, '🎨', self.cycle_theme,
+            fg_color=HEAD_BG, hover_color=ACCENT_SOFT, text_color=TEXT, width=40)
+        theme_btn.pack(side='left', padx=4)
+
         title_container = ctk_theme.frame(top, BG)
-        title_container.pack(side='left', fill='y')
+        title_container.pack(fill='x')
 
         title_row = ctk_theme.frame(title_container, BG)
         title_row.pack(anchor='w')
@@ -603,8 +672,9 @@ class StartupManagerGUI(ctk.CTk):
                         font_size=22, weight='bold').pack(anchor='w')
         ctk_theme.label(title_text, brand.APP_MOTTO, text_color=ACCENT,
                         font_size=12, weight='bold').pack(anchor='w', pady=(2, 0))
-        ctk_theme.label(title_container, brand.APP_TAGLINE, text_color=MUTED,
-                        font_size=11).pack(anchor='w', pady=(6, 0))
+        self._hdr_tagline_lbl = ctk_theme.label(
+            title_container, brand.APP_TAGLINE, text_color=MUTED, font_size=11, wraplength=900)
+        self._hdr_tagline_lbl.pack(anchor='w', pady=(6, 0))
 
         banner = ctk_theme.frame(title_container, ACCENT_SOFT, corner_radius=8)
         banner.pack(anchor='w', fill='x', pady=(8, 0))
@@ -613,29 +683,30 @@ class StartupManagerGUI(ctk.CTk):
             text_color=ACCENT, font_size=11, weight='bold',
         ).pack(anchor='w', padx=12, pady=8)
 
-        summary = ctk_theme.frame(title_container, BG)
-        summary.pack(anchor='w', fill='x', pady=(10, 0))
+        self._hdr_summary = ctk_theme.frame(title_container, BG)
+        self._hdr_summary.pack(fill='x', pady=(10, 0))
+        self._hdr_summary.grid_columnconfigure(0, weight=1)
 
-        badges = ctk_theme.frame(summary, BG)
-        badges.pack(side='left')
+        self._hdr_badges = ctk_theme.frame(self._hdr_summary, BG)
+        self._hdr_badges.grid(row=0, column=0, sticky='nw')
         badge_fg = ACCENT_DARK if CURRENT_THEME == 'light' else ACCENT
         self.hdr_measured_lbl = ctk_theme.label(
-            badges, '📁 Measured: —', text_color=badge_fg, font_size=10, weight='bold')
+            self._hdr_badges, '📁 Measured: —', text_color=badge_fg, font_size=10, weight='bold')
         self.hdr_archived_lbl = ctk_theme.label(
-            badges, '🗂 Archived: —', text_color=badge_fg, font_size=10, weight='bold')
+            self._hdr_badges, '🗂 Archived: —', text_color=badge_fg, font_size=10, weight='bold')
         self.hdr_reclaim_lbl = ctk_theme.label(
-            badges, '🧹 Reclaimable: —', text_color=badge_fg, font_size=10, weight='bold')
+            self._hdr_badges, '🧹 Reclaimable: —', text_color=badge_fg, font_size=10, weight='bold')
         self.hdr_receipt_lbl = ctk_theme.label(
-            badges, '🧾 Last Receipt: —', text_color=badge_fg, font_size=10, weight='bold')
-        for lbl in (self.hdr_measured_lbl, self.hdr_archived_lbl,
-                    self.hdr_reclaim_lbl, self.hdr_receipt_lbl):
-            lbl.pack(side='left', padx=(0, 12), pady=4)
+            self._hdr_badges, '🧾 Last Receipt: —', text_color=badge_fg, font_size=10, weight='bold')
+        for col, lbl in enumerate((self.hdr_measured_lbl, self.hdr_archived_lbl,
+                                   self.hdr_reclaim_lbl, self.hdr_receipt_lbl)):
+            lbl.grid(row=col // 2, column=col % 2, sticky='w', padx=(0, 12), pady=2)
 
-        hero = ctk_theme.frame(
-            summary, ACCENT_SOFT, corner_radius=10,
+        self._hdr_hero = ctk_theme.frame(
+            self._hdr_summary, ACCENT_SOFT, corner_radius=10,
             border_width=2, border_color=ACCENT)
-        hero.pack(side='left', padx=(16, 0))
-        hero_inner = ctk_theme.frame(hero, ACCENT_SOFT, corner_radius=10)
+        self._hdr_hero.grid(row=0, column=1, sticky='ne', padx=(16, 0))
+        hero_inner = ctk_theme.frame(self._hdr_hero, ACCENT_SOFT, corner_radius=10)
         hero_inner.pack(padx=14, pady=10)
         self.hdr_trust_value = ctk_theme.label(
             hero_inner, '—', text_color=ACCENT, font_size=24, weight='bold')
@@ -661,30 +732,6 @@ class StartupManagerGUI(ctk.CTk):
                           'View evidence: what custody trust means and what is missing.')
         self._add_tooltip(self.hdr_receipt_lbl,
                           'Your most recent Cleanroom Receipt after a cleanup.')
-
-        toolbar = ctk_theme.frame(top, BG)
-        toolbar.pack(side='right', pady=(4, 0))
-        self.tb_scan = ctk_theme.button(
-            toolbar, '🔍 Scan', self.refresh_cleanup,
-            fg_color=HEAD_BG, hover_color=ACCENT_SOFT, text_color=TEXT)
-        self.tb_scan.pack(side='left', padx=4)
-        self.tb_preview = ctk_theme.button(
-            toolbar, '🧾 Preview Receipt', self.preview_cleanup_receipt,
-            fg_color=HEAD_BG, hover_color=ACCENT_SOFT, text_color=TEXT)
-        self.tb_preview.pack(side='left', padx=4)
-        self.tb_apply = ctk_theme.button(
-            toolbar, '🗂 Archive & Clean', self.apply_cleanup,
-            fg_color=ACCENT, hover_color=ACCENT_DARK, text_color=ON_ACCENT, primary=True)
-        self.tb_apply.pack(side='left', padx=4)
-        self.tb_restore = ctk_theme.button(
-            toolbar, '↩ Restore',
-            lambda: (self.tab_control.select(5), self.refresh_restore()),
-            fg_color=HEAD_BG, hover_color=ACCENT_SOFT, text_color=TEXT)
-        self.tb_restore.pack(side='left', padx=4)
-        theme_btn = ctk_theme.button(
-            toolbar, '🎨', self.cycle_theme,
-            fg_color=HEAD_BG, hover_color=ACCENT_SOFT, text_color=TEXT, width=40)
-        theme_btn.pack(side='left', padx=4)
         nxt = THEME_ORDER[(THEME_ORDER.index(CURRENT_THEME) + 1) % len(THEME_ORDER)]
         self._add_tooltip(self.tb_scan, 'Scan configured folders for cleanup candidates. (F5 refreshes everything)')
         self._add_tooltip(self.tb_preview, 'Preview what the Cleanroom Receipt will say before you archive anything.')
@@ -1566,20 +1613,24 @@ class StartupManagerGUI(ctk.CTk):
 
         controls = ttk.Frame(self.cleanup_tab, style='Content.TFrame')
         controls.pack(fill='x', padx=10, pady=(0, 6))
-        self.scan_btn = ttk.Button(controls, text='Scan Now', style='Primary.TButton', command=self.refresh_cleanup)
+        btn_row = ttk.Frame(controls, style='Content.TFrame')
+        btn_row.pack(fill='x')
+        self.scan_btn = ttk.Button(btn_row, text='Scan Now', style='Primary.TButton', command=self.refresh_cleanup)
         self.scan_btn.pack(side='left')
-        self.apply_clean_btn = ttk.Button(controls, text='Archive & Clean', style='Primary.TButton',
+        self.apply_clean_btn = ttk.Button(btn_row, text='Archive & Clean', style='Primary.TButton',
                                           command=self.apply_cleanup)
         self.apply_clean_btn.pack(side='left', padx=6)
-        self.dedupe_check = ttk.Checkbutton(controls, text='Deduplicate', variable=self.dedupe_enabled)
+        self.dedupe_check = ttk.Checkbutton(btn_row, text='Deduplicate', variable=self.dedupe_enabled)
         self.dedupe_check.pack(side='left', padx=12)
-        self.select_all_btn = ttk.Button(controls, text='Select All', style='Action.TButton',
+        self.select_all_btn = ttk.Button(btn_row, text='Select All', style='Action.TButton',
                                          command=lambda: self._set_cleanup_selection(True))
         self.select_all_btn.pack(side='left', padx=(12, 0))
-        self.select_none_btn = ttk.Button(controls, text='Select None', style='Action.TButton',
+        self.select_none_btn = ttk.Button(btn_row, text='Select None', style='Action.TButton',
                                           command=lambda: self._set_cleanup_selection(False))
         self.select_none_btn.pack(side='left', padx=6)
-        self.cleanup_progress = ttk.Progressbar(controls, mode='indeterminate', length=160)
+        progress_row = ttk.Frame(controls, style='Content.TFrame')
+        progress_row.pack(fill='x', pady=(6, 0))
+        self.cleanup_progress = ttk.Progressbar(progress_row, mode='indeterminate', length=200)
 
         cleanup_frame = ttk.Frame(self.cleanup_tab)
         cleanup_frame.pack(fill='both', expand=True, padx=10, pady=(6, 10))
@@ -1590,9 +1641,9 @@ class StartupManagerGUI(ctk.CTk):
         self.cleanup_tree.heading('size', text='Size')
         self.cleanup_tree.heading('path', text='Path')
         self.cleanup_tree.column('sel', width=36, anchor='center', stretch=False)
-        self.cleanup_tree.column('reason', width=140, anchor='w')
-        self.cleanup_tree.column('size', width=120, anchor='center')
-        self.cleanup_tree.column('path', width=650, anchor='w')
+        self.cleanup_tree.column('reason', width=120, anchor='w', stretch=False)
+        self.cleanup_tree.column('size', width=90, anchor='center', stretch=False)
+        self.cleanup_tree.column('path', width=400, anchor='w', stretch=True)
         self.cleanup_tree.pack(fill='both', expand=True, side='left')
         self.cleanup_tree.tag_configure('oddrow', background=CARD_BG)
         self.cleanup_tree.tag_configure('evenrow', background=ROW_ALT)
@@ -1628,38 +1679,44 @@ class StartupManagerGUI(ctk.CTk):
 
         controls = ttk.Frame(self.restore_tab, style='Content.TFrame')
         controls.pack(fill='x', padx=10, pady=(8, 4))
-        self.reload_restore_btn = ttk.Button(controls, text='Reload Log', style='Action.TButton',
+        btn_row = ttk.Frame(controls, style='Content.TFrame')
+        btn_row.pack(fill='x')
+        self.reload_restore_btn = ttk.Button(btn_row, text='Reload Log', style='Action.TButton',
                                              command=self.refresh_restore)
         self.reload_restore_btn.pack(side='left')
-        self.restore_selected_btn = ttk.Button(controls, text='Restore Selected', style='Action.TButton',
+        self.restore_selected_btn = ttk.Button(btn_row, text='Restore Selected', style='Action.TButton',
                                                command=self.restore_selected_entry)
         self.restore_selected_btn.pack(side='left', padx=6)
-        self.restore_all_btn = ttk.Button(controls, text='Restore All', style='Action.TButton',
+        self.restore_all_btn = ttk.Button(btn_row, text='Restore All', style='Action.TButton',
                                           command=self.restore_all_entries)
         self.restore_all_btn.pack(side='left', padx=6)
-        self.time_machine_btn = ttk.Button(controls, text='🕐 Cleanroom Rewind', style='Action.TButton',
+        self.time_machine_btn = ttk.Button(btn_row, text='🕐 Cleanroom Rewind', style='Action.TButton',
                                            command=self.open_time_machine)
         self.time_machine_btn.pack(side='left', padx=6)
         self._add_tooltip(self.time_machine_btn,
                           'See every cleanup day at a glance and roll a whole day back.')
+        filter_row = ttk.Frame(controls, style='Content.TFrame')
+        filter_row.pack(fill='x', pady=(6, 0))
         self.restore_filter_var = tk.StringVar()
-        filter_entry = ttk.Entry(controls, textvariable=self.restore_filter_var, width=28, style='Search.TEntry')
+        filter_entry = ttk.Entry(filter_row, textvariable=self.restore_filter_var, width=28, style='Search.TEntry')
         filter_entry.pack(side='right')
         filter_entry.bind('<Return>', lambda e: self.refresh_restore())
-        ttk.Label(controls, text='Filter:', style='Info.TLabel').pack(side='right', padx=(0, 6))
+        ttk.Label(filter_row, text='Filter:', style='Info.TLabel').pack(side='right', padx=(0, 6))
 
         restore_frame = ttk.Frame(self.restore_tab)
         restore_frame.pack(fill='both', expand=True, padx=10, pady=(6, 10))
+        self._restore_frame = restore_frame
         left = ttk.Frame(restore_frame)
+        self._restore_left = left
         left.pack(side='left', fill='both', expand=True)
         restore_cols = ('src', 'dest', 'time')
         self.restore_tree = ttk.Treeview(left, columns=restore_cols, show='headings', selectmode='browse')
         self.restore_tree.heading('src', text='Original Path')
         self.restore_tree.heading('dest', text='Archived Path')
         self.restore_tree.heading('time', text='Time')
-        self.restore_tree.column('src', width=380, anchor='w')
-        self.restore_tree.column('dest', width=380, anchor='w')
-        self.restore_tree.column('time', width=170, anchor='center')
+        self.restore_tree.column('src', width=240, anchor='w', stretch=True, minwidth=120)
+        self.restore_tree.column('dest', width=240, anchor='w', stretch=True, minwidth=120)
+        self.restore_tree.column('time', width=140, anchor='center', stretch=False, minwidth=100)
         self.restore_tree.pack(fill='both', expand=True, side='left')
         self.restore_tree.tag_configure('oddrow', background=CARD_BG)
         self.restore_tree.tag_configure('evenrow', background=ROW_ALT)
@@ -1672,9 +1729,11 @@ class StartupManagerGUI(ctk.CTk):
         restore_vscroll.pack(side='right', fill='y')
         restore_hscroll.pack(side='bottom', fill='x')
 
-        right = ttk.Frame(restore_frame, width=380, style='Card.TFrame')
+        right = ttk.Frame(restore_frame, width=320, style='Card.TFrame')
+        self._restore_preview_panel = right
         right.pack(side='left', fill='y', padx=(8, 0))
         right.pack_propagate(False)
+        self._restore_split_mode = 'wide'
         ttk.Label(right, text='Preview', font=('Segoe UI', 11, 'bold'), background=CARD_BG).pack(anchor='w', padx=8, pady=(8, 4))
         self.restore_detail_src = ttk.Label(right, text='Original: —', style='CardInfo.TLabel', wraplength=360, justify='left')
         self.restore_detail_dest = ttk.Label(right, text='Archived: —', style='CardInfo.TLabel', wraplength=360, justify='left')
@@ -1687,17 +1746,8 @@ class StartupManagerGUI(ctk.CTk):
         self.restore_detail_exists.pack(anchor='w', padx=8, pady=(2, 2))
         self.restore_detail_size.pack(anchor='w', padx=8, pady=(2, 8))
 
-        preview_box = ttk.Labelframe(right, text='File preview', style='Detail.TLabelframe')
-        preview_box.pack(fill='both', expand=True, padx=8, pady=(0, 8))
-        self._preview_photo = None
-        self.preview_image_label = ttk.Label(preview_box, background=CARD_BG, anchor='center')
-        self.preview_text = tk.Text(preview_box, height=10, wrap='none', state='disabled',
-                                    font=('Consolas', 9), background=PREVIEW_BG, relief='flat',
-                                    borderwidth=0, foreground=TEXT, insertbackground=TEXT)
-        self.preview_text.pack(fill='both', expand=True, padx=6, pady=6)
-
         detail_actions = ttk.Frame(right, style='Card.TFrame')
-        detail_actions.pack(fill='x', padx=8, pady=(0, 8))
+        detail_actions.pack(side='bottom', fill='x', padx=8, pady=(0, 8))
         self.preview_btn = ttk.Button(detail_actions, text='Preview (Dry-run)', style='Action.TButton',
                                       command=self.restore_selected_entry)
         self.preview_btn.pack(side='left')
@@ -1707,6 +1757,16 @@ class StartupManagerGUI(ctk.CTk):
         self.open_archived_btn = ttk.Button(detail_actions, text='Open Archived', style='Action.TButton',
                                             command=self._open_archived_selected)
         self.open_archived_btn.pack(side='left', padx=6)
+
+        preview_box = ttk.Labelframe(right, text='File preview', style='Detail.TLabelframe')
+        preview_box.pack(fill='both', expand=True, padx=8, pady=(0, 8))
+        self._preview_photo = None
+        self.preview_image_label = ttk.Label(preview_box, background=CARD_BG, anchor='center')
+        self.preview_text = tk.Text(preview_box, height=8, wrap='none', state='disabled',
+                                    font=('Consolas', 9), background=PREVIEW_BG, relief='flat',
+                                    borderwidth=0, foreground=TEXT, insertbackground=TEXT)
+        self.preview_text.pack(fill='both', expand=True, padx=6, pady=6)
+
         self.restore_tree.bind('<<TreeviewSelect>>', lambda e: self._on_restore_select())
         self.restore_tree.bind('<Return>', lambda e: self.restore_selected_entry())
 

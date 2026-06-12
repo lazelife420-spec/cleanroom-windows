@@ -5,7 +5,7 @@ import re
 from typing import Callable
 
 DEFAULT_SIZE = (1280, 760)
-MIN_SIZE = (1000, 600)
+MIN_SIZE = (1040, 640)
 MARGIN = 28
 TASKBAR_RESERVE = 52
 

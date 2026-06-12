@@ -19,9 +19,21 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 GEOMETRIES = (
+    (1280, 760, '1280x760-default'),
     (1240, 760, '1240x760'),
     (1366, 768, '1366x768'),
     (1920, 1080, '1920x1080'),
+)
+
+TAB_ACTION_CHECKS = (
+    (3, 'cleaner', (
+        ('scan_btn', 'Scan Now'),
+        ('apply_clean_btn', 'Archive & Clean'),
+    )),
+    (5, 'restore', (
+        ('reload_restore_btn', 'Reload Log'),
+        ('restore_selected_btn', 'Restore Selected'),
+    )),
 )
 
 TOOLBAR_LABELS = (
@@ -44,13 +56,37 @@ def _widget_ok(widget, name: str, min_w: int = 24, min_h: int = 14) -> list[str]
     issues = []
     try:
         widget.update_idletasks()
+        if not widget.winfo_ismapped():
+            issues.append(f'{name} not mapped')
+            return issues
         w, h = widget.winfo_width(), widget.winfo_height()
         if w < min_w or h < min_h:
             issues.append(f'{name} too small ({w}x{h})')
-        if not widget.winfo_viewable():
-            issues.append(f'{name} not viewable')
     except Exception as exc:
         issues.append(f'{name} check error: {exc}')
+    return issues
+
+
+def _widget_in_viewport(widget, root, name: str, margin: int = 6) -> list[str]:
+    issues = []
+    try:
+        widget.update_idletasks()
+        root.update_idletasks()
+        if not widget.winfo_ismapped():
+            return issues
+        wx, wy = widget.winfo_rootx(), widget.winfo_rooty()
+        ww, wh = widget.winfo_width(), widget.winfo_height()
+        rx, ry = root.winfo_rootx(), root.winfo_rooty()
+        rw, rh = root.winfo_width(), root.winfo_height()
+        if ww < 8 or wh < 8:
+            issues.append(f'{name} not laid out ({ww}x{wh})')
+            return issues
+        if wx + ww < rx + margin or wy + wh < ry + margin:
+            issues.append(f'{name} clipped off-screen (pos {wx},{wy})')
+        if wx > rx + rw - margin or wy > ry + rh - margin:
+            issues.append(f'{name} outside window bounds')
+    except Exception as exc:
+        issues.append(f'{name} viewport check error: {exc}')
     return issues
 
 
@@ -76,19 +112,46 @@ def check_layout(app, width: int, height: int, label: str, *, check_settings: bo
     app.geometry(f'{width}x{height}+{x}+{y}')
     app.update_idletasks()
     app.update()
+    if hasattr(app, '_update_responsive_layout'):
+        app._update_responsive_layout()
     time.sleep(0.15)
 
     issues: list[str] = []
     for attr, name in TOOLBAR_LABELS:
-        issues.extend(_widget_ok(getattr(app, attr), f'{label}/{name}'))
+        widget = getattr(app, attr)
+        issues.extend(_widget_ok(widget, f'{label}/{name}'))
+        issues.extend(_widget_in_viewport(widget, app, f'{label}/{name}'))
 
     issues.extend(_widget_ok(app.hdr_trust_value, f'{label}/Custody Trust value', 20, 16))
     issues.extend(_widget_ok(app.hdr_trust_lbl, f'{label}/Custody Trust label', 40, 12))
+    issues.extend(_widget_in_viewport(app.tb_apply, app, f'{label}/Archive & Clean toolbar'))
 
     if not _find_text_in_tree(app, 'Preview Receipt'):
         issues.append(f'{label}/proof-flow or Preview Receipt text missing')
     if not _find_text_in_tree(app, 'Archive-first mode is ON'):
         issues.append(f'{label}/archive-first banner missing')
+
+    for tab_idx, tab_name, buttons in TAB_ACTION_CHECKS:
+        try:
+            app.tab_control.select(tab_idx)
+            app.update_idletasks()
+            app.update()
+            time.sleep(0.08)
+            for attr, btn_name in buttons:
+                widget = getattr(app, attr, None)
+                if widget is None:
+                    issues.append(f'{label}/{tab_name} missing {attr}')
+                    continue
+                issues.extend(_widget_ok(widget, f'{label}/{tab_name}/{btn_name}'))
+                issues.extend(_widget_in_viewport(widget, app, f'{label}/{tab_name}/{btn_name}'))
+        except Exception as exc:
+            issues.append(f'{label}/{tab_name} tab check error: {exc}')
+
+    try:
+        app.tab_control.select(0)
+        app.update_idletasks()
+    except Exception:
+        pass
 
     if check_settings:
         try:
@@ -144,7 +207,7 @@ def run_scaling_gates(tk_scaling: float = 1.0) -> int:
         print(f'\nScaling gate FAILED ({len(all_issues)} issue(s))', file=sys.stderr)
         return 1
     scale_note = f', tk scaling={tk_scaling}' if tk_scaling != 1.0 else ''
-    print(f'\nScaling gate PASSED (1240x760, 1366x768, 1920x1080{scale_note})')
+    print(f'\nScaling gate PASSED (1280x760 default, 1240x760, 1366x768, 1920x1080{scale_note})')
     return 0
 
 
