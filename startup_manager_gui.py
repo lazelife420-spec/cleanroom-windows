@@ -4,6 +4,8 @@ import queue
 import brand
 import customtkinter as ctk
 from ui import ctk_theme
+from ui.launcher import run_launch_splash
+from ui.window_geometry import apply_window_geometry, bind_window_tracking, animations_disabled
 from ui.receipt_animation import (
     ReceiptPrinterPanel,
     DEFAULT_LINES,
@@ -79,6 +81,11 @@ try:
     import uninstaller
 except Exception:
     uninstaller = None
+
+try:
+    import program_advice
+except Exception:
+    program_advice = None
 
 try:
     import foresight
@@ -281,8 +288,7 @@ class StartupManagerGUI(ctk.CTk):
         ctk_theme.sync_appearance(CURRENT_THEME)
         super().__init__()
         self.title(brand.APP_DISPLAY)
-        self.geometry('1280x760')
-        self.minsize(1000, 600)
+        self.withdraw()
         self.resizable(True, True)
         self.configure(fg_color=BG)
         try:
@@ -327,10 +333,55 @@ class StartupManagerGUI(ctk.CTk):
             self.restore_log_path = Path(log_file) if log_file else Path(__file__).parent / 'cleanup_log.json'
         self._bg_queue = queue.Queue()
         self.wants_restart = False
+        self._launch_done = False
+        self._launch_logo = None
         self.after(50, self._poll_bg_queue)
 
         self.create_widgets()
         self._bind_shortcuts()
+        self.bind('<Configure>', self._on_root_configure, add='+')
+        self.after(30, self._run_launch_sequence)
+
+    def _launcher_colors(self):
+        return {
+            'BG': BG, 'CARD_BG': CARD_BG, 'ACCENT': ACCENT,
+            'TEXT': TEXT, 'MUTED': MUTED, 'BORDER': BORDER,
+        }
+
+    def _save_window_geometry(self, geo: dict):
+        prefs = load_ui_prefs()
+        prefs['window_geometry'] = geo
+        save_ui_prefs(prefs)
+
+    def _run_launch_sequence(self):
+        if animations_disabled():
+            self._finish_launch_sequence()
+            return
+        self._launch_logo = self._load_logo(96)
+        run_launch_splash(
+            self,
+            title=brand.APP_DISPLAY,
+            tagline=brand.APP_MOTTO,
+            colors=self._launcher_colors(),
+            logo_photo=self._launch_logo,
+            on_complete=self._finish_launch_sequence,
+            min_ms=1100,
+        )
+
+    def _finish_launch_sequence(self):
+        if self._launch_done:
+            return
+        self._launch_done = True
+        prefs = load_ui_prefs()
+        apply_window_geometry(self, prefs)
+        bind_window_tracking(self, on_save=self._save_window_geometry)
+        self.deiconify()
+        self.lift()
+        self.focus_force()
+        self._update_responsive_layout()
+        if not animations_disabled():
+            self._fade_in_window()
+            self.after(350, self._pulse_proof_flow)
         self.refresh()
         self.refresh_cleanup()
         self.refresh_restore()
@@ -338,9 +389,61 @@ class StartupManagerGUI(ctk.CTk):
         self.refresh_activity()
         self.refresh_uninstaller()
         if foresight:
-            # Record today's free-space snapshot, then redraw the forecast.
             self._run_bg(foresight.record_snapshot,
                          lambda result, err: self.refresh_foresight())
+
+    def _fade_in_window(self, step=0, steps=12):
+        try:
+            self.attributes('-alpha', 0.0 if step == 0 else step / steps)
+        except Exception:
+            return
+        if step < steps:
+            self.after(24, lambda: self._fade_in_window(step + 1, steps))
+        else:
+            try:
+                self.attributes('-alpha', 1.0)
+            except Exception:
+                pass
+
+    def _pulse_proof_flow(self, step=0):
+        if step >= 4 or not hasattr(self, 'ctx_next_lbl'):
+            return
+        colors = (ACCENT, TEXT, ACCENT, TEXT)
+        try:
+            self.ctx_next_lbl.configure(text_color=colors[step % len(colors)])
+        except Exception:
+            return
+        self.after(120, lambda: self._pulse_proof_flow(step + 1))
+
+    def _on_root_configure(self, event):
+        if event.widget is not self:
+            return
+        if getattr(self, '_resize_job', None):
+            try:
+                self.after_cancel(self._resize_job)
+            except Exception:
+                pass
+        self._resize_job = self.after(80, self._update_responsive_layout)
+
+    def _update_responsive_layout(self):
+        try:
+            w = self.winfo_width()
+        except Exception:
+            return
+        if w < 200:
+            return
+        wrap = max(420, w - 300)
+        if hasattr(self, 'ctx_desc_lbl'):
+            self.ctx_desc_lbl.configure(wraplength=wrap)
+        if hasattr(self, 'ctx_next_lbl'):
+            self.ctx_next_lbl.configure(wraplength=max(320, w - 380))
+        if hasattr(self, 'detail_hint'):
+            self.detail_hint.configure(wraplength=max(400, w - 360))
+        wrap = max(420, w - 340)
+        for attr in ('uninst_detail_what', 'uninst_detail_does',
+                     'uninst_detail_need', 'uninst_detail_uninst'):
+            if hasattr(self, attr):
+                getattr(self, attr).configure(wraplength=wrap)
 
     # ------------------------------------------------------------------
     # Styling
@@ -422,6 +525,7 @@ class StartupManagerGUI(ctk.CTk):
     def create_widgets(self):
         self._build_header()
         self._build_proof_flow_bar()
+        self._build_context_bar()
         main = ttk.Frame(self)
         main.pack(fill='both', expand=True, padx=10, pady=(0, 0))
         self._build_sidebar(main)
@@ -456,6 +560,7 @@ class StartupManagerGUI(ctk.CTk):
         self._build_statusbar()
         self.tab_control.bind('<<NotebookTabChanged>>', self._sync_nav_buttons)
         self._sync_nav_buttons()
+        self._update_context_panel()
 
     def _load_logo(self, px=36):
         """Load app icon scaled to roughly px pixels; None if unavailable."""
@@ -597,6 +702,84 @@ class StartupManagerGUI(ctk.CTk):
             font_size=12, weight='bold',
         ).pack(padx=14, pady=8)
 
+    def _build_context_bar(self):
+        """Live context for the active tab / submenu — updates on navigation."""
+        bar = ctk_theme.frame(self, SIDEBAR_BG, corner_radius=8)
+        bar.pack(fill='x', padx=12, pady=(0, 8))
+        top = ctk_theme.frame(bar, SIDEBAR_BG)
+        top.pack(fill='x', padx=12, pady=(10, 2))
+        self.ctx_title_lbl = ctk_theme.label(
+            top, 'Review', text_color=ACCENT, font_size=12, weight='bold')
+        self.ctx_title_lbl.pack(side='left')
+        self.ctx_subtitle_lbl = ctk_theme.label(
+            top, '', text_color=MUTED, font_size=10)
+        self.ctx_subtitle_lbl.pack(side='left', padx=(10, 0))
+        self.ctx_desc_lbl = ctk_theme.label(
+            bar, '', text_color=TEXT, font_size=11, wraplength=980, justify='left')
+        self.ctx_desc_lbl.pack(anchor='w', padx=12, pady=(0, 4))
+        next_row = ctk_theme.frame(bar, SIDEBAR_BG)
+        next_row.pack(fill='x', padx=12, pady=(0, 10))
+        ctk_theme.label(next_row, 'Next step', text_color=MUTED, font_size=9, weight='bold').pack(
+            side='left', padx=(0, 6))
+        self.ctx_next_lbl = ctk_theme.label(
+            next_row, '', text_color=ACCENT, font_size=10, wraplength=900, justify='left')
+        self.ctx_next_lbl.pack(side='left', fill='x', expand=True)
+
+    def _update_context_panel(self):
+        try:
+            tab_idx = self.tab_control.index('current')
+        except Exception:
+            tab_idx = 0
+        ctx = (ctk_theme.TAB_CONTEXT[tab_idx] if tab_idx < len(ctk_theme.TAB_CONTEXT)
+               else ctk_theme.TAB_CONTEXT[0])
+        subtitle = ''
+        desc = ctx['description']
+        nxt = ctx['next']
+
+        if tab_idx == 2:
+            cat = getattr(self, 'current_category', 'All')
+            sub = ctk_theme.STARTUP_FILTER_CONTEXT.get(cat)
+            if sub:
+                subtitle = f'· {sub[0]}'
+                desc = sub[1]
+                nxt = sub[2]
+            visible = len(self.tree.get_children()) if hasattr(self, 'tree') else 0
+            subtitle = f'{subtitle} · {visible} shown' if subtitle else f'{visible} items shown'
+            ent = self._selected_entry() if hasattr(self, 'tree') else None
+            if ent and ent.get('name'):
+                src = ent.get('source') or 'unknown'
+                nxt = (f'Selected: {ent["name"]} ({src}) — '
+                       'use Enable/Disable below or copy the command.')
+        elif tab_idx == 3:
+            count = len(getattr(self, 'cleanup_items', []) or [])
+            checked = len(getattr(self, 'cleanup_selected', set()) or [])
+            subtitle = f'· {count} candidates · {checked} checked'
+            if count == 0:
+                nxt = 'No candidates yet — try Settings → Relaxed scan, then Scan Now.'
+            else:
+                nxt = f'{checked} item(s) ready — Preview Receipt, then Archive & Clean.'
+        elif tab_idx == 4:
+            entry = self._selected_program() if hasattr(self, 'uninstall_tree') else None
+            if entry and program_advice:
+                advice = program_advice.analyze_program(entry)
+                subtitle = f'· {advice["category"].replace("_", " ")}'
+                nxt = advice['need']
+            else:
+                nxt = 'Select a program — read the summary panel, then Uninstall or Force Remove.'
+        elif tab_idx == 0:
+            count = len(getattr(self, 'cleanup_items', []) or [])
+            if count:
+                subtitle = f'· {count} cleanup candidate(s) awaiting review'
+
+        self.ctx_title_lbl.configure(text=ctx['title'])
+        self.ctx_subtitle_lbl.configure(text=subtitle)
+        self.ctx_desc_lbl.configure(text=desc)
+        self.ctx_next_lbl.configure(text=nxt)
+
+    def _navigate_to_tab(self, idx):
+        self.tab_control.select(idx)
+        self._update_context_panel()
+
     def set_theme(self, name):
         if name not in PALETTES:
             return
@@ -620,13 +803,24 @@ class StartupManagerGUI(ctk.CTk):
         ctk_theme.label(sidebar, brand.APP_DISPLAY, text_color=TEXT,
                         font_size=13, weight='bold').pack(anchor='w', padx=12, pady=(12, 10))
         self._nav_buttons = []
+        nav_tips = (
+            'Proof dashboard — candidates, disk foresight, receipt preview.',
+            'Activity ledger — every archive with timestamps.',
+            'Startup programs — filter by source, enable or disable.',
+            'Scan folders and archive reviewed files to custody.',
+            'Uninstall programs and archive leftovers.',
+            'Restore archived files from the cleanup log.',
+            'Scan paths, ages, archive folder, quick toggles.',
+        )
         for idx, label in enumerate(('📋  Review', '📊  Activity', '🚀  Startup', '🧹  Cleaner',
                                      '🗑  Uninstaller', '↩  Restore', '⚙  Settings')):
             btn = ctk_theme.button(
-                sidebar, label, lambda i=idx: self.tab_control.select(i),
+                sidebar, label, lambda i=idx: self._navigate_to_tab(i),
                 fg_color='transparent', hover_color=ACCENT_SOFT, text_color=TEXT)
             btn.pack(fill='x', pady=2, padx=6)
             self._nav_buttons.append(btn)
+            if idx < len(nav_tips):
+                self._add_tooltip(btn, nav_tips[idx])
 
         sep = ctk.CTkFrame(sidebar, height=1, fg_color=BORDER, corner_radius=0)
         sep.pack(fill='x', pady=10, padx=10)
@@ -677,6 +871,7 @@ class StartupManagerGUI(ctk.CTk):
             else:
                 btn.configure(fg_color='transparent', text_color=TEXT,
                               font=ctk_theme.font(11, 'normal'))
+        self._update_context_panel()
 
     def _build_optimizer_tab(self):
         header = ttk.Frame(self.optimizer_tab, style='Content.TFrame')
@@ -1267,6 +1462,11 @@ class StartupManagerGUI(ctk.CTk):
         for btn in (self.cat_all, self.cat_folders, self.cat_registry,
                     self.cat_tasks, self.cat_disabled):
             btn.pack(side='left', padx=(0, 4))
+        self._add_tooltip(self.cat_all, ctk_theme.STARTUP_FILTER_CONTEXT['All'][1])
+        self._add_tooltip(self.cat_folders, ctk_theme.STARTUP_FILTER_CONTEXT['Folders'][1])
+        self._add_tooltip(self.cat_registry, ctk_theme.STARTUP_FILTER_CONTEXT['Registry'][1])
+        self._add_tooltip(self.cat_tasks, ctk_theme.STARTUP_FILTER_CONTEXT['Tasks'][1])
+        self._add_tooltip(self.cat_disabled, ctk_theme.STARTUP_FILTER_CONTEXT['Disabled'][1])
         self._refresh_category_buttons()
 
         self.search_var = tk.StringVar()
@@ -1319,6 +1519,9 @@ class StartupManagerGUI(ctk.CTk):
         self.detail_source.grid(row=0, column=1, sticky='w', padx=(0, 12), pady=2)
         self.detail_location.grid(row=1, column=0, sticky='w', padx=(0, 12), pady=2, columnspan=2)
         self.detail_command.grid(row=2, column=0, sticky='w', padx=(0, 12), pady=2, columnspan=2)
+        self.detail_hint = ttk.Label(details_grid, text='', style='CardInfo.TLabel',
+                                     foreground=ACCENT, wraplength=900, justify='left')
+        self.detail_hint.grid(row=3, column=0, sticky='w', padx=(0, 12), pady=(6, 2), columnspan=2)
         self.copy_command_detail = ttk.Button(detail_frame, text='Copy Command', style='Action.TButton',
                                               command=self.copy_command)
         self.copy_command_detail.pack(anchor='e', padx=10, pady=(0, 8))
@@ -1536,6 +1739,49 @@ class StartupManagerGUI(ctk.CTk):
             wraplength=920, justify='left',
         ).pack(anchor='w', padx=14, pady=(0, 12))
 
+        quick_box = ctk_theme.frame(self.settings_tab, CARD_BG, corner_radius=10)
+        quick_box.pack(fill='x', padx=10, pady=(0, 10))
+        ctk_theme.label(
+            quick_box, 'Quick settings', text_color=ACCENT, font_size=13, weight='bold',
+        ).pack(anchor='w', padx=14, pady=(12, 4))
+        ctk_theme.label(
+            quick_box,
+            'Toggle common scan targets and behavior. Click Save Settings to apply.',
+            text_color=MUTED, font_size=10,
+        ).pack(anchor='w', padx=14, pady=(0, 8))
+
+        self._settings_downloads_path = str(
+            Path(os.environ.get('USERPROFILE', Path.home())) / 'Downloads')
+        self._settings_temp_path = os.environ.get('TEMP') or str(
+            Path(os.environ.get('USERPROFILE', Path.home())) / 'AppData' / 'Local' / 'Temp')
+
+        self.set_scan_downloads = tk.BooleanVar(value=True)
+        self.set_scan_temp = tk.BooleanVar(value=True)
+        self.set_relaxed_scan = tk.BooleanVar(value=False)
+        self.set_dedupe_default = self.dedupe_enabled
+
+        quick_grid = ctk_theme.frame(quick_box, CARD_BG)
+        quick_grid.pack(fill='x', padx=14, pady=(0, 12))
+        for col in range(2):
+            quick_grid.columnconfigure(col, weight=1)
+
+        def _quick_switch(row, col, text, var, command=None):
+            sw = ctk_theme.switch(
+                quick_grid, text, var, command,
+                text_color=TEXT, progress_color=ACCENT,
+                button_color=BORDER, button_hover_color=ACCENT,
+            )
+            sw.grid(row=row, column=col, sticky='w', padx=(0, 16), pady=4)
+            return sw
+
+        _quick_switch(0, 0, 'Scan Downloads folder', self.set_scan_downloads)
+        _quick_switch(0, 1, 'Scan Temp folder', self.set_scan_temp)
+        _quick_switch(1, 0, 'Relaxed scan (for testing / empty folders)',
+                       self.set_relaxed_scan, self._settings_relaxed_toggle)
+        _quick_switch(1, 1, 'Deduplicate before archive', self.set_dedupe_default)
+        self.set_power_var = tk.BooleanVar(value=bool(load_ui_prefs().get('power_user')))
+        _quick_switch(2, 0, 'Power user mode (dense lists)', self.set_power_var)
+
         body = ttk.Frame(self.settings_tab, style='Content.TFrame')
         body.pack(fill='both', expand=True, padx=10)
 
@@ -1592,12 +1838,6 @@ class StartupManagerGUI(ctk.CTk):
                                    values=[PALETTES[t]['LABEL'] for t in THEME_ORDER], width=20)
         theme_combo.grid(row=7, column=1, sticky='w', pady=(10, 3))
 
-        self.set_power_var = tk.BooleanVar(value=bool(load_ui_prefs().get('power_user')))
-        power_cb = ttk.Checkbutton(grid, text='Power user mode (dense lists, registry-key column)',
-                                   variable=self.set_power_var)
-        power_cb.configure(style='TCheckbutton')
-        power_cb.grid(row=8, column=0, columnspan=2, sticky='w', pady=(4, 3))
-
         def _apply_ui():
             prefs = load_ui_prefs()
             label = self.set_theme_var.get()
@@ -1613,7 +1853,7 @@ class StartupManagerGUI(ctk.CTk):
 
         apply_ui_btn = ttk.Button(grid, text='Save UI Settings', style='Action.TButton',
                                   command=_apply_ui)
-        apply_ui_btn.grid(row=7, column=2, rowspan=2, sticky='w', padx=(6, 0), pady=(10, 3))
+        apply_ui_btn.grid(row=7, column=2, sticky='w', padx=(6, 0), pady=(10, 3))
         self._add_tooltip(apply_ui_btn, 'Applies instantly — the window rebuilds with the new look.')
         grid.columnconfigure(1, weight=1)
 
@@ -1647,6 +1887,34 @@ class StartupManagerGUI(ctk.CTk):
 
         self.load_settings_form()
 
+    def _settings_relaxed_toggle(self):
+        if self.set_relaxed_scan.get():
+            self.set_temp_age.set(0)
+            self.set_installer_age.set(0)
+            self.set_size_mb.set(1)
+        else:
+            self.set_temp_age.set(7)
+            self.set_installer_age.set(30)
+            self.set_size_mb.set(200)
+
+    def _settings_sync_path_toggles(self, paths):
+        paths = {str(Path(p)) for p in (paths or [])}
+        dl = str(Path(self._settings_downloads_path))
+        tp = str(Path(self._settings_temp_path))
+        self.set_scan_downloads.set(dl in paths)
+        self.set_scan_temp.set(tp in paths)
+
+    def _settings_apply_path_toggles(self, paths):
+        paths = [str(Path(p)) for p in (paths or [])]
+        dl = str(Path(self._settings_downloads_path))
+        tp = str(Path(self._settings_temp_path))
+        paths = [p for p in paths if p not in (dl, tp)]
+        if self.set_scan_downloads.get():
+            paths.insert(0, dl)
+        if self.set_scan_temp.get():
+            paths.append(tp)
+        return paths
+
     def _settings_add_path(self):
         folder = filedialog.askdirectory(parent=self)
         if folder:
@@ -1667,14 +1935,25 @@ class StartupManagerGUI(ctk.CTk):
         except Exception:
             cfg = {}
         cfg = cfg or {}
+        paths = cfg.get('paths', []) or []
+        self._settings_sync_path_toggles(paths)
         self.set_paths_list.delete(0, 'end')
-        for p in cfg.get('paths', []) or []:
-            self.set_paths_list.insert('end', str(p))
-        self.set_archive_var.set(str(cfg.get('archive_dir') or ''))
+        dl = str(Path(self._settings_downloads_path))
+        tp = str(Path(self._settings_temp_path))
+        for p in paths:
+            ps = str(p)
+            if ps in (dl, tp):
+                continue
+            self.set_paths_list.insert('end', ps)
         ages = cfg.get('age_days', {}) or {}
-        self.set_temp_age.set(int(ages.get('temp', 7)))
-        self.set_installer_age.set(int(ages.get('installers', 30)))
-        self.set_size_mb.set(int(cfg.get('size_threshold_mb', 200)))
+        temp_age = int(ages.get('temp', 7))
+        inst_age = int(ages.get('installers', 30))
+        size_mb = int(cfg.get('size_threshold_mb', 200))
+        self.set_temp_age.set(temp_age)
+        self.set_installer_age.set(inst_age)
+        self.set_size_mb.set(size_mb)
+        self.set_relaxed_scan.set(temp_age == 0 and inst_age == 0 and size_mb <= 1)
+        self.set_archive_var.set(str(cfg.get('archive_dir') or ''))
         self.set_confirm_gb.set(round((cfg.get('confirm_threshold_bytes') or 5 * 1024 ** 3) / 1024 ** 3, 2))
         self.set_ext_var.set(', '.join(cfg.get('extensions_archive', []) or []))
         self.set_exclude_text.delete('1.0', 'end')
@@ -1696,7 +1975,7 @@ class StartupManagerGUI(ctk.CTk):
                 continue
             exts.append(e if e.startswith('.') else '.' + e)
         cfg.update({
-            'paths': list(self.set_paths_list.get(0, 'end')),
+            'paths': self._settings_apply_path_toggles(list(self.set_paths_list.get(0, 'end'))),
             'archive_dir': self.set_archive_var.get().strip() or cfg.get('archive_dir'),
             'age_days': {'temp': int(self.set_temp_age.get()), 'installers': int(self.set_installer_age.get())},
             'size_threshold_mb': int(self.set_size_mb.get()),
@@ -1705,6 +1984,7 @@ class StartupManagerGUI(ctk.CTk):
             'exclude_patterns': [l.strip() for l in self.set_exclude_text.get('1.0', 'end').splitlines() if l.strip()],
             'whitelist': [l.strip() for l in self.set_whitelist_text.get('1.0', 'end').splitlines() if l.strip()],
         })
+        self.dedupe_enabled.set(bool(self.set_dedupe_default.get()))
         try:
             written_to = self._write_config(cfg)
         except Exception as e:
@@ -1831,9 +2111,46 @@ class StartupManagerGUI(ctk.CTk):
         self.uninstall_tree.tag_configure('actioncol', foreground=ACCENT)
         self.uninstall_tree.bind('<Double-1>', self._on_uninstall_double)
         self.uninstall_tree.bind('<Button-1>', self._on_uninstall_click)
+        self.uninstall_tree.bind('<Button-3>', self._on_uninstall_right_click)
         self.uninstall_tree.bind('<space>', self._on_uninstall_space)
+        self.uninstall_tree.bind('<<TreeviewSelect>>', self._on_uninstall_select)
+        self._uninst_context_menu = None
         self.uninst_empty_hint = self._make_empty_hint(
             self.uninstall_tree, 'No programs match this view.\nTry "All Programs" or Refresh.')
+
+        detail_frame = ttk.Labelframe(
+            self.uninstall_tab,
+            text='Program summary — local guidance (no web lookup)',
+            style='Detail.TLabelframe',
+        )
+        detail_frame.pack(fill='x', padx=10, pady=(0, 6))
+        detail_grid = ttk.Frame(detail_frame, style='Detail.TLabelframe')
+        detail_grid.pack(fill='x', padx=10, pady=10)
+        self.uninst_detail_name = ttk.Label(
+            detail_grid, text='Select a program above.', style='CardInfo.TLabel',
+            font=('Segoe UI', 10, 'bold'))
+        self.uninst_detail_name.grid(row=0, column=0, columnspan=2, sticky='w', pady=(0, 4))
+        ttk.Label(detail_grid, text='What it is:', style='CardInfo.TLabel').grid(
+            row=1, column=0, sticky='nw', padx=(0, 8))
+        self.uninst_detail_what = ttk.Label(
+            detail_grid, text='—', style='CardInfo.TLabel', wraplength=820, justify='left')
+        self.uninst_detail_what.grid(row=1, column=1, sticky='w', pady=2)
+        ttk.Label(detail_grid, text='What it does:', style='CardInfo.TLabel').grid(
+            row=2, column=0, sticky='nw', padx=(0, 8))
+        self.uninst_detail_does = ttk.Label(
+            detail_grid, text='—', style='CardInfo.TLabel', wraplength=820, justify='left')
+        self.uninst_detail_does.grid(row=2, column=1, sticky='w', pady=2)
+        ttk.Label(detail_grid, text='Do you need it?', style='CardInfo.TLabel').grid(
+            row=3, column=0, sticky='nw', padx=(0, 8))
+        self.uninst_detail_need = ttk.Label(
+            detail_grid, text='—', style='CardInfo.TLabel', wraplength=820, justify='left')
+        self.uninst_detail_need.grid(row=3, column=1, sticky='w', pady=2)
+        ttk.Label(detail_grid, text='Uninstaller:', style='CardInfo.TLabel').grid(
+            row=4, column=0, sticky='nw', padx=(0, 8))
+        self.uninst_detail_uninst = ttk.Label(
+            detail_grid, text='—', style='CardInfo.TLabel', wraplength=820, justify='left')
+        self.uninst_detail_uninst.grid(row=4, column=1, sticky='w', pady=2)
+        detail_grid.columnconfigure(1, weight=1)
 
         self.uninst_status_lbl = ttk.Label(self.uninstall_tab, text='', style='Info.TLabel')
         self.uninst_status_lbl.pack(anchor='w', padx=12, pady=(0, 8))
@@ -1977,6 +2294,162 @@ class StartupManagerGUI(ctk.CTk):
             return
         self.uninstall_selected_program()
 
+    def _uninst_verdict_color(self, verdict: str) -> str:
+        if verdict in (program_advice.KEEP, program_advice.USUALLY_KEEP) if program_advice else False:
+            return REASON_COLORS.get('installer/archive', ACCENT)
+        if verdict == program_advice.CAUTION if program_advice else False:
+            return REASON_COLORS.get('uninstall-leftover', TEXT)
+        if verdict in (program_advice.SAFE_IF_UNUSED, program_advice.OPTIONAL) if program_advice else False:
+            return REASON_COLORS.get('large-file', TEXT)
+        return TEXT
+
+    def _on_uninstall_select(self, event=None):
+        self._update_uninstall_detail()
+        self._update_context_panel()
+
+    def _update_uninstall_detail(self):
+        if not hasattr(self, 'uninst_detail_name'):
+            return
+        entry = self._selected_program()
+        if not entry:
+            self.uninst_detail_name.config(text='Select a program above.')
+            for lbl in (self.uninst_detail_what, self.uninst_detail_does,
+                        self.uninst_detail_need, self.uninst_detail_uninst):
+                lbl.config(text='—', foreground=TEXT)
+            return
+        self.uninst_detail_name.config(text=entry.get('name') or '—')
+        if not program_advice:
+            self.uninst_detail_what.config(text='Guidance module unavailable.', foreground=TEXT)
+            self.uninst_detail_does.config(text='—', foreground=TEXT)
+            self.uninst_detail_need.config(text='—', foreground=TEXT)
+            self.uninst_detail_uninst.config(text='—', foreground=TEXT)
+            return
+        advice = program_advice.analyze_program(entry)
+        color = self._uninst_verdict_color(advice['verdict'])
+        self.uninst_detail_what.config(text=advice['what_is'], foreground=TEXT)
+        self.uninst_detail_does.config(text=advice['what_does'], foreground=TEXT)
+        self.uninst_detail_need.config(text=advice['need'], foreground=color)
+        self.uninst_detail_uninst.config(text=advice['uninstaller_note'], foreground=TEXT)
+        if entry.get('install_location'):
+            loc = entry['install_location']
+            self.uninst_detail_what.config(
+                text=f"{advice['what_is']} Install folder: {loc}")
+
+    def _uninstall_registry_key_text(self, entry):
+        if not entry:
+            return ''
+        hive = entry.get('hive') or ''
+        key = entry.get('key') or ''
+        sub = entry.get('subkey') or ''
+        if hive and key and sub:
+            return f'{hive}\\{key}\\{sub}'
+        return ''
+
+    def _ensure_uninstall_context_menu(self):
+        if self._uninst_context_menu is not None:
+            return
+        menu = tk.Menu(
+            self.uninstall_tree, tearoff=0,
+            bg=CARD_BG, fg=TEXT,
+            activebackground=ACCENT_SOFT, activeforeground=TEXT,
+            disabledforeground=MUTED, bd=1, relief='solid',
+            font=('Segoe UI', 10),
+        )
+        menu.add_command(label='Uninstall…', command=self.uninstall_selected_program)
+        menu.add_command(label='Scan Leftovers…', command=self.scan_leftovers_for_selected)
+        menu.add_command(label='Force Remove…', command=self.force_remove_selected)
+        menu.add_separator()
+        menu.add_command(label='Check / Uncheck', command=self._uninstall_ctx_toggle_check)
+        menu.add_command(label='Check all visible', command=self._uninstall_ctx_check_all)
+        menu.add_command(label='Uncheck all visible', command=self._uninstall_ctx_uncheck_all)
+        menu.add_separator()
+        menu.add_command(label='Copy program name', command=self._uninstall_copy_name)
+        menu.add_command(label='Copy uninstall command', command=self._uninstall_copy_command)
+        menu.add_command(label='Copy registry key', command=self._uninstall_copy_registry_key)
+        menu.add_separator()
+        menu.add_command(label='Refresh list', command=self.refresh_uninstaller)
+        self._uninst_context_menu = menu
+
+    def _on_uninstall_right_click(self, event):
+        iid = self.uninstall_tree.identify_row(event.y)
+        if iid:
+            if iid not in self.uninstall_tree.selection():
+                self.uninstall_tree.selection_set(iid)
+        self._ensure_uninstall_context_menu()
+        menu = self._uninst_context_menu
+        entry = None
+        if iid:
+            try:
+                entry = self.uninstall_entries[int(iid)]
+            except (ValueError, IndexError):
+                entry = None
+        has_entry = entry is not None
+        has_cmd = bool(entry and uninstaller and uninstaller.build_uninstall_command(
+            entry, quiet=bool(self.uninst_quiet_var.get())))
+        has_key = bool(self._uninstall_registry_key_text(entry))
+        for idx, enabled in (
+            (0, has_entry), (1, has_entry), (2, has_entry),
+            (4, has_entry), (5, True), (6, True),
+            (8, has_entry), (9, has_cmd), (10, has_key),
+            (12, True),
+        ):
+            menu.entryconfig(idx, state='normal' if enabled else 'disabled')
+        try:
+            menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            menu.grab_release()
+        return 'break'
+
+    def _uninstall_ctx_toggle_check(self):
+        for iid in self.uninstall_tree.selection():
+            try:
+                self._toggle_uninstall_check(int(iid))
+            except ValueError:
+                pass
+            break
+
+    def _uninstall_ctx_check_all(self):
+        visible = {self.uninstall_entries.index(e) for e in self._visible_uninstall_rows()}
+        self.uninst_checked |= visible
+        self._populate_uninstall_tree()
+
+    def _uninstall_ctx_uncheck_all(self):
+        visible = {self.uninstall_entries.index(e) for e in self._visible_uninstall_rows()}
+        self.uninst_checked -= visible
+        self._populate_uninstall_tree()
+
+    def _uninstall_copy_name(self):
+        entry = self._selected_program()
+        if not entry:
+            return
+        self.clipboard_clear()
+        self.clipboard_append(entry.get('name') or '')
+        self.update()
+        self._set_status('Program name copied to clipboard.')
+
+    def _uninstall_copy_command(self):
+        entry = self._selected_program()
+        if not entry or not uninstaller:
+            return
+        cmd = uninstaller.build_uninstall_command(entry, quiet=bool(self.uninst_quiet_var.get()))
+        if not cmd:
+            messagebox.showinfo('Copy', 'No uninstall command available for this program.')
+            return
+        self.clipboard_clear()
+        self.clipboard_append(cmd)
+        self.update()
+        self._set_status('Uninstall command copied to clipboard.')
+
+    def _uninstall_copy_registry_key(self):
+        entry = self._selected_program()
+        text = self._uninstall_registry_key_text(entry)
+        if not text:
+            return
+        self.clipboard_clear()
+        self.clipboard_append(text)
+        self.update()
+        self._set_status('Registry key copied to clipboard.')
+
     def _selected_programs(self):
         # Checked items win (IObit-style batch); fall back to the row selection.
         if self.uninst_checked:
@@ -2037,12 +2510,12 @@ class StartupManagerGUI(ctk.CTk):
                         'it may be broken or cancelled.\n\nForce remove instead? This archives '
                         'leftover files and registry keys, then removes the orphaned entry '
                         'from the Programs list (everything backed up, restorable).'):
-                    self._scan_leftovers(entry['name'], force_entry=entry)
+                    self._scan_leftovers(entry, force_remove=True)
                 return
             if messagebox.askyesno('Leftovers',
                                    f"Scan for leftover folders of \"{entry['name']}\" "
                                    'and archive them (restorable)?'):
-                self._scan_leftovers(entry['name'])
+                self._scan_leftovers(entry)
 
         self._run_bg(work, done)
 
@@ -2051,16 +2524,34 @@ class StartupManagerGUI(ctk.CTk):
         if entry is None:
             messagebox.showinfo('Force remove', 'Select a program first.')
             return
+        advice_text = ''
+        if program_advice:
+            a = program_advice.analyze_program(entry)
+            advice_text = (
+                f"\n\nLocal guidance: {a['need']}\n{a['uninstaller_note']}"
+            )
+        admin_note = ''
+        if uninstaller and uninstaller.entry_requires_admin(entry):
+            admin_note = (
+                '\n\nNote: this entry is under HKLM — removing it from the Programs list '
+                'may require running Cleanroom as administrator.'
+            )
+            try:
+                if startup_manager_admin and not startup_manager_admin.is_admin():
+                    admin_note += ' You are not elevated right now.'
+            except Exception:
+                pass
         if not messagebox.askyesno(
                 'Force remove',
-                f"Force remove \"{entry['name']}\"?\n\nUse this when the normal uninstaller is "
-                'broken or missing. Cleanroom will:\n'
-                '  1. Archive leftover folders (moved, not deleted)\n'
+                f"Force remove \"{entry['name']}\"?\n\n"
+                'Use when the normal uninstaller is broken or missing. Cleanroom will:\n'
+                '  1. Archive leftover folders + install location (moved, not deleted)\n'
                 '  2. Export + remove matching registry keys (.reg backups)\n'
-                '  3. Remove the orphaned entry from the Programs list (.reg backup)\n\n'
-                'Everything can be restored from the Restore tab or Cleanroom Rewind.'):
+                '  3. Remove the orphaned Programs-list entry (.reg backup)\n\n'
+                f'Everything is restorable from Restore or Cleanroom Rewind.'
+                f'{advice_text}{admin_note}'):
             return
-        self._scan_leftovers(entry['name'], force_entry=entry)
+        self._scan_leftovers(entry, force_remove=True)
 
     def _batch_uninstall(self, entries):
         """Uninstall several programs sequentially (IObit-style batch queue)."""
@@ -2111,7 +2602,7 @@ class StartupManagerGUI(ctk.CTk):
         if entry is None:
             messagebox.showinfo('Leftovers', 'Select a program first.')
             return
-        self._scan_leftovers(entry['name'])
+        self._scan_leftovers(entry)
 
     def _archive_dir_from_config(self):
         try:
@@ -2123,14 +2614,14 @@ class StartupManagerGUI(ctk.CTk):
             pass
         return str(Path.home() / 'cleanup_archive')
 
-    def _scan_leftovers(self, program_name, force_entry=None):
-        if uninstaller is None:
+    def _scan_leftovers(self, entry, *, force_remove=False):
+        if uninstaller is None or not entry:
             return
-        self.uninst_status_lbl.config(text=f'Scanning for leftovers of {program_name}…')
+        name = entry.get('name') or 'program'
+        self.uninst_status_lbl.config(text=f'Scanning for leftovers of {name}…')
 
         def work():
-            return (uninstaller.find_leftovers(program_name),
-                    uninstaller.find_registry_leftovers(program_name))
+            return uninstaller.collect_force_remove_targets(entry, name)
 
         def done(result, err):
             self.uninst_status_lbl.config(text='')
@@ -2139,15 +2630,14 @@ class StartupManagerGUI(ctk.CTk):
                 return
             dirs, keys = result or ([], [])
             if not dirs and not keys:
-                if force_entry is not None:
-                    # Nothing else to sweep — still remove the orphaned entry.
-                    self._remove_orphan_entry(force_entry)
+                if force_remove:
+                    self._remove_orphan_entry(entry)
                 else:
                     messagebox.showinfo(
                         'Leftovers',
-                        f'No leftover folders or registry keys found for "{program_name}".')
+                        f'No leftover folders or registry keys found for "{name}".')
                 return
-            self._show_leftover_dialog(program_name, dirs, keys, force_entry=force_entry)
+            self._show_leftover_dialog(entry, dirs, keys, force_remove=force_remove)
 
         self._run_bg(work, done)
 
@@ -2173,25 +2663,30 @@ class StartupManagerGUI(ctk.CTk):
         self._run_bg(lambda: uninstaller.remove_uninstall_entry(
             entry, archive_dir, str(self.restore_log_path)), done)
 
-    def _show_leftover_dialog(self, program_name, paths, reg_keys=(), force_entry=None):
+    def _show_leftover_dialog(self, entry, paths, reg_keys=(), force_remove=False):
+        program_name = entry.get('name') or 'program'
         dlg = tk.Toplevel(self)
         dlg.configure(bg=BG)
-        dlg.title('Leftovers found')
-        dlg.geometry('640x380')
+        dlg.title('Force removal' if force_remove else 'Leftovers found')
+        dlg.geometry('680x440')
         dlg.transient(self)
         dlg.grab_set()
         dlg.bind('<Escape>', lambda e: dlg.destroy())
 
-        title = ('Force removal' if force_entry is not None else 'Leftovers') + f' — "{program_name}"'
+        title = ('Force removal' if force_remove else 'Leftovers') + f' — "{program_name}"'
         ttk.Label(dlg, text=title,
                   font=('Segoe UI', 12, 'bold')).pack(anchor='w', padx=14, pady=(14, 2))
+        if program_advice:
+            advice = program_advice.analyze_program(entry)
+            ttk.Label(dlg, text=advice['need'], style='Info.TLabel',
+                      wraplength=640).pack(anchor='w', padx=14, pady=(0, 4))
         note = ('Checked folders are MOVED to the archive (not deleted). Checked registry '
                 'keys are EXPORTED to a .reg file in the archive before removal. Both can '
                 'be restored from the Restore tab or Cleanroom Rewind.')
-        if force_entry is not None:
+        if force_remove:
             note += ' The orphaned Programs-list entry is removed afterwards (.reg backup).'
         ttk.Label(dlg, text=note,
-                  style='Info.TLabel', wraplength=600).pack(anchor='w', padx=14, pady=(0, 8))
+                  style='Info.TLabel', wraplength=640).pack(anchor='w', padx=14, pady=(0, 8))
 
         body = ttk.Frame(dlg, style='Card.TFrame')
         body.pack(fill='both', expand=True, padx=14, pady=(0, 8))
@@ -2214,13 +2709,16 @@ class StartupManagerGUI(ctk.CTk):
             cb.pack(anchor='w', padx=8, pady=2)
             check_vars.append((var, 'dir', p))
         for k in reg_keys:
-            # Registry keys default to unchecked — more caution warranted.
-            # In force mode the user already opted into registry removal.
-            var = tk.BooleanVar(value=force_entry is not None)
+            var = tk.BooleanVar(value=force_remove)
             cb = ttk.Checkbutton(inner, text=f'🗝 {k}', variable=var)
             cb.configure(style='TCheckbutton')
             cb.pack(anchor='w', padx=8, pady=2)
             check_vars.append((var, 'reg', k))
+        if force_remove:
+            ttk.Label(inner, text='Programs-list entry (always removed on confirm):',
+                      style='CardInfo.TLabel').pack(anchor='w', padx=8, pady=(6, 2))
+            ttk.Label(inner, text=f'🗝 {uninstaller.uninstall_key_path(entry)}',
+                      style='CardInfo.TLabel').pack(anchor='w', padx=16, pady=(0, 4))
 
         footer = ttk.Frame(dlg, style='Content.TFrame')
         footer.pack(fill='x', padx=14, pady=(0, 12))
@@ -2229,53 +2727,51 @@ class StartupManagerGUI(ctk.CTk):
             chosen_dirs = [p for var, kind, p in check_vars if var.get() and kind == 'dir']
             chosen_keys = [p for var, kind, p in check_vars if var.get() and kind == 'reg']
             dlg.destroy()
-            if not chosen_dirs and not chosen_keys and force_entry is None:
+            if not chosen_dirs and not chosen_keys and not force_remove:
                 return
             archive_dir = self._archive_dir_from_config()
             self.uninst_status_lbl.config(
                 text=f'Archiving {len(chosen_dirs)} folder(s) + {len(chosen_keys)} registry key(s)…')
 
             def work():
-                moved = uninstaller.archive_leftovers(
-                    chosen_dirs, archive_dir, str(self.restore_log_path))
-                reg_moved = uninstaller.archive_registry_leftovers(
-                    chosen_keys, archive_dir, str(self.restore_log_path))
-                entry_removed = None
-                if force_entry is not None:
-                    entry_removed = uninstaller.remove_uninstall_entry(
-                        force_entry, archive_dir, str(self.restore_log_path))
-                return moved, reg_moved, entry_removed
+                return uninstaller.force_remove(
+                    entry, archive_dir, str(self.restore_log_path),
+                    chosen_dirs=chosen_dirs, chosen_keys=chosen_keys,
+                    remove_list_entry=force_remove,
+                )
 
             def done(result, err):
                 self.uninst_status_lbl.config(text='')
                 if err is not None:
                     messagebox.showerror('Leftovers', f'Archiving failed: {err}')
                     return
-                moved, reg_moved, entry_removed = result or ([], [], None)
+                result = result or {}
+                moved = result.get('folders') or []
+                reg_moved = result.get('registry') or []
+                entry_removed = result.get('list_entry')
                 summary = f'Archived {len(moved)} folder(s)'
                 if chosen_keys:
                     summary += f' and {len(reg_moved)} registry key(s) (exported to .reg)'
                 summary += f' under:\n{archive_dir}\\uninstall_leftovers'
-                if force_entry is not None:
+                if force_remove:
                     if entry_removed:
                         summary += '\n\nThe orphaned Programs-list entry was removed (.reg backup).'
                     else:
                         summary += ('\n\nCould not remove the Programs-list entry — HKLM entries '
                                     'require running as administrator.')
                 summary += '\n\nEverything appears in the Restore tab if you change your mind.'
-                messagebox.showinfo('Force remove' if force_entry is not None else 'Leftovers',
-                                    summary)
+                messagebox.showinfo('Force remove' if force_remove else 'Leftovers', summary)
                 self.refresh_restore()
-                if force_entry is not None:
+                if force_remove:
                     self.refresh_uninstaller()
 
             self._run_bg(work, done)
 
-        action_text = 'Remove & Archive' if force_entry is not None else 'Archive Selected'
-        ttk.Button(footer, text=action_text, style='Primary.TButton',
-                   command=do_archive).pack(side='left')
+        btn_label = 'Archive & force remove' if force_remove else 'Archive selected'
+        ttk.Button(footer, text=btn_label, style='Primary.TButton',
+                   command=do_archive).pack(side='right')
         ttk.Button(footer, text='Cancel', style='Action.TButton',
-                   command=dlg.destroy).pack(side='left', padx=6)
+                   command=dlg.destroy).pack(side='right', padx=(0, 8))
 
     # ------------------------------------------------------------------
     # Keyboard shortcuts / accessibility
@@ -2329,9 +2825,12 @@ class StartupManagerGUI(ctk.CTk):
         except Exception:
             pass  # window destroyed
 
-    def _set_status(self, text):
+    def _set_status(self, text, *, pulse=False):
         try:
             self.global_status.config(text=text)
+            if pulse and not animations_disabled():
+                self.global_status.config(fg=ACCENT)
+                self.after(420, lambda: self.global_status.config(fg=TEXT))
         except Exception:
             pass
 
@@ -2386,6 +2885,7 @@ class StartupManagerGUI(ctk.CTk):
         self.current_category = cat
         self._refresh_category_buttons()
         self._apply_filter()
+        self._update_context_panel()
 
     def _sort_column(self, col):
         reverse = self.current_sort[0] == col and not self.current_sort[1]
@@ -2441,6 +2941,7 @@ class StartupManagerGUI(ctk.CTk):
             tag = 'evenrow' if idx % 2 else 'oddrow'
             self.tree.insert('', 'end', values=(v['name'], v['source'], v['location'], v['command']), tags=(tag,))
         self._refresh_empty_hint(self.startup_empty_hint, self.tree)
+        self._update_context_panel()
 
     def _update_actions(self):
         ent = self._selected_entry()
@@ -2497,6 +2998,8 @@ class StartupManagerGUI(ctk.CTk):
             self._update_cleanup_tree()
             self.refresh_optimizer()
             self.cleanup_status_lbl.config(text=f'Found {len(items)} candidate(s) across configured paths.')
+            self._set_status(f'Scan complete — {len(items)} candidate(s).', pulse=True)
+            self._update_context_panel()
             self._set_status(f'Scan complete: {len(items)} candidate(s), {self._format_size(self.cleanup_total_size)} reclaimable.')
 
         self._run_bg(lambda: cleanup_main.scan_candidates(cfg), done)
@@ -3850,11 +4353,28 @@ class StartupManagerGUI(ctk.CTk):
             self.detail_source.config(text='Source: —')
             self.detail_location.config(text='Location: —')
             self.detail_command.config(text='Command: —')
+            self.detail_hint.config(text='Select a startup item above to see its command and available actions.')
+            self._update_context_panel()
             return
         self.detail_name.config(text=f"Name: {ent.get('name') or '—'}")
         self.detail_source.config(text=f"Source: {ent.get('source') or '—'}")
         self.detail_location.config(text=f"Location: {ent.get('location') or '—'}")
         self.detail_command.config(text=f"Command: {ent.get('command') or '—'}")
+        src = (ent.get('source') or '').lower()
+        if src == 'registry':
+            hint = ('Registry Run key — Disable Selected backs up the value and stops this at sign-in. '
+                    'Re-enable anytime from the Disabled filter.')
+        elif src == 'disabled':
+            hint = 'Previously disabled by Cleanroom — Re-enable Selected restores the original Run value.'
+        elif src == 'task':
+            hint = ('Scheduled task — open Task Scheduler to disable, or verify the command path is expected.')
+        elif src == 'folder':
+            hint = ('Startup folder shortcut — delete the .lnk in the folder shown in Location, '
+                    'or move it out of the startup directory.')
+        else:
+            hint = 'Review the command path — disable only if you recognize and no longer need this entry.'
+        self.detail_hint.config(text=hint)
+        self._update_context_panel()
 
     def enable_selected(self):
         ent = self._selected_entry()

@@ -110,8 +110,9 @@ def capture_gui_screenshots():
     foresight_module.HEALTH_PATH = tmp / 'health_history.json'
 
     app = gui_module.StartupManagerGUI(config_path=cfg, restore_log_path=log_path)
-    app.geometry(f'{RELEASE_WIDTH}x{RELEASE_HEIGHT}')
     app.update_idletasks()
+    app._finish_launch_sequence()
+    app.geometry(f'{RELEASE_WIDTH}x{RELEASE_HEIGHT}')
     sw, sh = app.winfo_screenwidth(), app.winfo_screenheight()
     x = max(0, (sw - RELEASE_WIDTH) // 2)
     y = max(0, (sh - RELEASE_HEIGHT) // 2)

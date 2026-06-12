@@ -47,12 +47,18 @@ def normalize_entry(raw, hive_name='', key_path='', subkey=''):
     except (TypeError, ValueError):
         size_kb = 0
 
+    install_location = str(raw.get('InstallLocation') or raw.get('InstallSource') or '').strip()
+    if install_location:
+        install_location = str(Path(install_location))
+
     return {
         'name': name,
         'version': str(raw.get('DisplayVersion') or ''),
         'publisher': str(raw.get('Publisher') or ''),
         'install_date': install_date,
         'size_kb': size_kb,
+        'install_location': install_location,
+        'comments': str(raw.get('Comments') or raw.get('DisplayIcon') or '').strip(),
         'uninstall_string': str(raw.get('UninstallString') or ''),
         'quiet_uninstall_string': str(raw.get('QuietUninstallString') or ''),
         'hive': hive_name,
@@ -365,6 +371,53 @@ def remove_uninstall_entry(entry, archive_dir, log_file,
         [uninstall_key_path(entry)], archive_dir, log_file,
         export_fn=export_fn, delete_fn=delete_fn)
     return entries[0] if entries else None
+
+
+def collect_force_remove_targets(entry, program_name=None):
+    """Folders and registry keys to offer during force remove."""
+    program_name = program_name or entry.get('name') or ''
+    dirs = find_leftovers(program_name)
+    seen = {str(Path(d)).lower() for d in dirs}
+    loc = (entry.get('install_location') or '').strip()
+    if loc:
+        p = Path(loc)
+        if p.is_dir() and str(p).lower() not in seen:
+            dirs.append(str(p))
+            seen.add(str(p).lower())
+    keys = find_registry_leftovers(program_name)
+    return dirs, keys
+
+
+def force_remove(entry, archive_dir, log_file, *,
+                 chosen_dirs=None, chosen_keys=None,
+                 remove_list_entry=True,
+                 export_fn=export_registry_key,
+                 delete_fn=delete_registry_key):
+    """Archive selected leftovers, then remove the Programs-list entry.
+
+    Returns dict with keys: folders, registry, list_entry (log entry or None).
+    """
+    name = entry.get('name') or ''
+    if chosen_dirs is None or chosen_keys is None:
+        default_dirs, default_keys = collect_force_remove_targets(entry, name)
+        chosen_dirs = default_dirs if chosen_dirs is None else chosen_dirs
+        chosen_keys = default_keys if chosen_keys is None else chosen_keys
+
+    folders = archive_leftovers(chosen_dirs, archive_dir, log_file) if chosen_dirs else []
+    registry = archive_registry_leftovers(
+        chosen_keys, archive_dir, log_file, export_fn=export_fn, delete_fn=delete_fn,
+    ) if chosen_keys else []
+    list_entry = None
+    if remove_list_entry:
+        list_entry = remove_uninstall_entry(
+            entry, archive_dir, log_file, export_fn=export_fn, delete_fn=delete_fn)
+    return {'folders': folders, 'registry': registry, 'list_entry': list_entry}
+
+
+def entry_requires_admin(entry):
+    """True when registry changes likely need elevation (HKLM uninstall key)."""
+    hive = (entry.get('hive') or '').upper()
+    return 'LOCAL_MACHINE' in hive
 
 
 def _append_log(log_file, new_entries):

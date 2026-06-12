@@ -128,6 +128,8 @@ def sandbox(tmp_path, monkeypatch):
     monkeypatch.setattr(gui_module.StartupManagerGUI, '_show_proof_report', _capture_proof)
 
     app = gui_module.StartupManagerGUI(config_path=cfg_path, restore_log_path=log_path)
+    app.update_idletasks()
+    app._finish_launch_sequence()
     app.withdraw()
     try:
         yield {

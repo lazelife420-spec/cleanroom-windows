@@ -277,6 +277,50 @@ def test_remove_uninstall_entry_failed_export_returns_none(tmp_path):
     assert not (tmp_path / 'log.json').exists()
 
 
+def test_collect_force_remove_targets_includes_install_location(tmp_path):
+    app = tmp_path / 'OldApp'
+    app.mkdir()
+    entry = {
+        'name': 'OldApp Suite',
+        'install_location': str(app),
+        'hive': 'HKEY_CURRENT_USER',
+        'key': r'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall',
+        'subkey': 'OldApp',
+    }
+    dirs, keys = uninstaller.collect_force_remove_targets(entry)
+    assert str(app) in dirs
+    assert isinstance(keys, list)
+
+
+def test_force_remove_archives_and_removes_entry(tmp_path):
+    log = tmp_path / 'log.json'
+    src = tmp_path / 'leftover'
+    src.mkdir()
+    (src / 'data.txt').write_text('x', encoding='utf-8')
+    deleted = []
+
+    def fake_export(full_key, out_file):
+        Path(out_file).write_text('Windows Registry Editor Version 5.00\n')
+        return True
+
+    entry = {'name': 'Broken App', 'hive': 'HKEY_CURRENT_USER',
+             'key': r'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall',
+             'subkey': 'BrokenApp_is1'}
+    result = uninstaller.force_remove(
+        entry, tmp_path / 'arch', str(log),
+        chosen_dirs=[str(src)], chosen_keys=[],
+        export_fn=fake_export, delete_fn=lambda k: deleted.append(k) or True)
+    assert len(result['folders']) == 1
+    assert result['list_entry'] is not None
+    assert not src.exists()
+    assert deleted
+
+
+def test_entry_requires_admin_hklm():
+    assert uninstaller.entry_requires_admin({'hive': 'HKEY_LOCAL_MACHINE'})
+    assert not uninstaller.entry_requires_admin({'hive': 'HKEY_CURRENT_USER'})
+
+
 def test_restore_registry_export_missing_file(tmp_path):
     ok, msg = uninstaller.restore_registry_export(tmp_path / 'nope.reg')
     assert not ok

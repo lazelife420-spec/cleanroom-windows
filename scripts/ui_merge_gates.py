@@ -108,10 +108,13 @@ def run_scaling_gates(tk_scaling: float = 1.0) -> int:
     from tkinter import messagebox
     import startup_manager_gui as gui_module
 
+    os.environ['CLEANROOM_DISABLE_ANIMATIONS'] = '1'
     for fn in ('showinfo', 'showwarning', 'showerror', 'askyesno'):
         setattr(messagebox, fn, lambda *a, **k: True if fn == 'askyesno' else None)
 
     app = gui_module.StartupManagerGUI()
+    app.update_idletasks()
+    app._finish_launch_sequence()
     if tk_scaling != 1.0:
         app.tk.call('tk', 'scaling', tk_scaling)
     all_issues: list[str] = []
