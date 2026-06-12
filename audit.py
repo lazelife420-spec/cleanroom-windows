@@ -4,6 +4,8 @@ import html
 from datetime import datetime
 from pathlib import Path
 
+from ledger import format_trust_score_display
+
 
 def _human(n):
     sign = '-' if n < 0 else ''
@@ -25,6 +27,11 @@ def export_html_audit(feed, custody, summary, trust, output_path, app_version='1
     ok = custody.get('missing', 0) == 0 and custody.get('total', 0) > 0
     status = 'CUSTODY VERIFIED' if ok else ('NO ACTIONS YET' if custody.get('total', 0) == 0 else 'GAPS DETECTED')
     status_color = '#22c55e' if ok else ('#94a3b8' if custody.get('total', 0) == 0 else '#f87171')
+    trust_display = format_trust_score_display(
+        custody.get('verified', 0),
+        custody.get('total', 0),
+        custody.get('missing', 0),
+    )
 
     rows = []
     for e in feed[:500]:
@@ -89,7 +96,7 @@ def export_html_audit(feed, custody, summary, trust, output_path, app_version='1
 
 <div class="hero">
   <div class="status">{status}</div>
-  <p>Trust score: <strong>{trust}/100</strong> — {custody.get("verified",0)}/{custody.get("total",0)} archived
+  <p>Trust score: <strong>{trust_display}</strong> — {custody.get("verified",0)}/{custody.get("total",0)} archived
      artifacts verified on disk ({_human(custody.get("bytes_in_custody",0))} in custody).</p>
   <div class="grid">
     <div class="stat"><b>{summary.get("total_actions",0)}</b><span>Actions logged</span></div>

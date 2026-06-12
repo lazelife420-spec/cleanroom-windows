@@ -39,3 +39,9 @@ def test_summarize_feed_and_trust_score():
     assert s['restore_events'] == 1
     assert ledger.trust_score(2, 3) == 67
     assert ledger.trust_score(0, 0) == 100
+
+
+def test_format_trust_score_display():
+    assert ledger.format_trust_score_display(1182, 1182, 0) == '100/100'
+    assert ledger.format_trust_score_display(1181, 1182, 1) == '99/100'
+    assert ledger.format_trust_score_display(0, 0, 0) == '100/100'
