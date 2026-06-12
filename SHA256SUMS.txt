@@ -1,2 +1,2 @@
-# Cleanroom v1.0.2 release checksums (SHA256)
+# Cleanroom v1.0.3 release checksums (SHA256)
 # Populated by CI at release - verify against GitHub Release assets

@@ -1,8 +1,13 @@
 # Changelog
 
-## Post v1.0.2 follow-up (not blockers)
+## 2026-06-12 — v1.0.3 archive browser, proof honesty, uninstaller guidance
 
-- Proof Pack trust display: do not show `100/100` when any archived artifact is missing (floor e.g. `99/100` when 1181/1182 verified).
+- Archive Browser + in-app receipts (view, copy, open file/folder).
+- Archive prune receipts + custody-only prune proof with tiered recommendations.
+- Proof Pack trust-score honesty fix: never display `100/100` when any artifact is missing.
+- Local-only uninstaller guidance (`program_advice.py`).
+- Safer Force Remove: preview, confirmation, registry export before delete, install-folder archive before removal.
+- Manual gates: `archive_prune_manual_gate.py`, `force_remove_manual_gate.py`.
 
 ## 2026-06-11 — v1.0.2 CustomTkinter UI polish
 
