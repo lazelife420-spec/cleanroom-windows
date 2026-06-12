@@ -335,6 +335,8 @@ class StartupManagerGUI(ctk.CTk):
         self.wants_restart = False
         self._launch_done = False
         self._launch_logo = None
+        self._tray = None
+        self.protocol('WM_DELETE_WINDOW', self._on_window_close)
         self.after(50, self._poll_bg_queue)
 
         self.create_widgets()
@@ -391,6 +393,41 @@ class StartupManagerGUI(ctk.CTk):
         if foresight:
             self._run_bg(foresight.record_snapshot,
                          lambda result, err: self.refresh_foresight())
+        self._init_tray()
+
+    def _init_tray(self):
+        try:
+            from ui.tray import TrayController
+            self._tray = TrayController(self)
+            if not self._tray.start():
+                self._tray = None
+        except Exception:
+            self._tray = None
+
+    def _on_window_close(self):
+        if getattr(self, '_tray', None):
+            self._tray.stop()
+        self.destroy()
+
+    def _tray_show_window(self):
+        self.deiconify()
+        self.lift()
+        try:
+            self.focus_force()
+        except Exception:
+            pass
+
+    def _tray_hide_window(self):
+        self.withdraw()
+
+    def _tray_quit(self):
+        if getattr(self, '_tray', None):
+            self._tray.stop()
+        try:
+            self.quit()
+        except Exception:
+            pass
+        self.destroy()
 
     def _fade_in_window(self, step=0, steps=12):
         try:
@@ -4598,7 +4635,59 @@ def _headless_main(argv):
     return cleanup_main.run_headless(config_path=args.config, dedupe=args.dedupe)
 
 
+def _parse_startup_argv(argv):
+    import argparse
+    ap = argparse.ArgumentParser(add_help=False)
+    ap.add_argument('--open-receipt', metavar='PATH', default=None)
+    args, _ = ap.parse_known_args(argv)
+    return args
+
+
+def open_receipt_standalone(path_str):
+    """Open a receipt file in the in-app viewer without running cleanup."""
+    path = Path(path_str)
+    if not path.is_file():
+        return 1
+    if receipts_module is None:
+        return 2
+    if not receipts_module.is_receipt_path(path):
+        return 2
+    try:
+        body = receipts_module.read_receipt(path)
+    except Exception:
+        return 2
+
+    root = tk.Tk()
+    root.withdraw()
+    try:
+        if show_receipt:
+            dlg = show_receipt(root, body, receipt_path=path,
+                               bg=BG, card=CARD_BG, text_fg=TEXT)
+
+            def _close():
+                try:
+                    dlg.destroy()
+                except Exception:
+                    pass
+                root.quit()
+
+            dlg.protocol('WM_DELETE_WINDOW', _close)
+            root.mainloop()
+        else:
+            messagebox.showerror('Receipt', 'Receipt viewer unavailable.', parent=root)
+            return 2
+    finally:
+        try:
+            root.destroy()
+        except Exception:
+            pass
+    return 0
+
+
 if __name__ == '__main__':
+    _startup = _parse_startup_argv(sys.argv[1:])
+    if _startup.open_receipt:
+        sys.exit(open_receipt_standalone(_startup.open_receipt))
     if '--headless-clean' in sys.argv[1:]:
         sys.exit(_headless_main(sys.argv[1:]))
     # Rebuild the window when the user flips the theme.

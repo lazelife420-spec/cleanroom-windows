@@ -76,7 +76,8 @@ def _find_receipt_path(entry_ts, receipt_dir=None):
     if not rdir.is_dir():
         return None
     entry_dt = _parse_ts(entry_ts)
-    receipts = sorted(rdir.glob('receipt_*.txt'))
+    import receipts as receipts_module
+    receipts = receipts_module.list_receipt_files(rdir, prefix='receipt')
     if not receipts:
         return None
     if entry_dt is None:

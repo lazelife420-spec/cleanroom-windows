@@ -44,3 +44,10 @@ Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; Tasks: deskto
 
 [Run]
 Filename: "{app}\{#AppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(AppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
+
+[Registry]
+Root: HKCU; Subkey: "Software\Classes\.cleanroom-receipt"; ValueType: string; ValueName: ""; ValueData: "CleanroomReceipt"; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\.cleanroom-receipt"; ValueType: string; ValueName: "Content Type"; ValueData: "application/x-cleanroom-receipt"; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\CleanroomReceipt"; ValueType: string; ValueName: ""; ValueData: "Cleanroom Receipt"; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\CleanroomReceipt\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\{#AppExeName},0"; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\CleanroomReceipt\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#AppExeName}"" --open-receipt ""%1"""; Flags: uninsdeletekey

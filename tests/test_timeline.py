@@ -107,6 +107,7 @@ def test_receipt_contains_summary_and_days_bought(tmp_path):
         entry('b', 'b2', '2026-06-01T10:01:00', reason='zero-byte', size=0),
     ]
     path = receipts.write_receipt(moved, days_bought=12.4, receipt_dir=tmp_path)
+    assert path.suffix == receipts.RECEIPT_EXT
     text = path.read_text(encoding='utf-8')
     assert 'CLEANROOM — RECEIPT' in text
     assert 'Items moved: 2' in text
@@ -135,4 +136,4 @@ def test_receipt_pruning_caps_files(tmp_path):
     for i in range(receipts.MAX_RECEIPTS + 5):
         receipts.write_receipt([entry('a', 'b', None)], receipt_dir=tmp_path,
                                now=start + timedelta(minutes=i))
-    assert len(list(tmp_path.glob('receipt_*.txt'))) == receipts.MAX_RECEIPTS
+    assert len(receipts.list_receipt_files(tmp_path)) == receipts.MAX_RECEIPTS

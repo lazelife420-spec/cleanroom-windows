@@ -2,4 +2,5 @@ pyyaml
 send2trash
 pytest
 pillow
+pystray
 customtkinter>=5.2.0
