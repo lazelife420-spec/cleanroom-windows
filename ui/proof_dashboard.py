@@ -292,7 +292,7 @@ def recent_proof_tile(
 
 
 def settings_section_nav(parent, labels: list[str], *, sidebar_bg: str, accent: str, muted: str, on_select):
-    """Segmented settings nav; returns dict label -> button."""
+    """Horizontal segmented settings nav (legacy); prefer settings_sidebar_nav."""
     row = ctk_theme.frame(parent, sidebar_bg)
     row.pack(fill='x', padx=12, pady=(0, 8))
     buttons = {}
@@ -303,6 +303,37 @@ def settings_section_nav(parent, labels: list[str], *, sidebar_bg: str, accent: 
         )
         btn.pack(side='left', padx=(0, 6))
         buttons[label] = btn
+    return buttons
+
+
+def settings_sidebar_nav(
+    parent,
+    items: list[tuple[str, str]],
+    *,
+    sidebar_bg: str,
+    accent: str,
+    muted: str,
+    text_color: str,
+    on_select,
+    width: int = 168,
+) -> dict[str, ctk.CTkButton]:
+    """Vertical settings nav; items are (display_label, section_key)."""
+    wrap = ctk_theme.frame(parent, sidebar_bg, corner_radius=10)
+    wrap.pack(fill='both', expand=True, padx=8, pady=8)
+    ctk_theme.label(
+        wrap, 'Sections', text_color=muted, font_size=9, weight='bold',
+    ).pack(anchor='w', padx=4, pady=(0, 6))
+    inner = ctk_theme.frame(wrap, sidebar_bg)
+    inner.pack(fill='both', expand=True)
+    buttons: dict[str, ctk.CTkButton] = {}
+    for label, key in items:
+        btn = ctk_theme.button(
+            inner, label, lambda k=key: on_select(k),
+            fg_color='transparent', hover_color=accent, text_color=text_color,
+            anchor='w', height=34, width=width,
+        )
+        btn.pack(fill='x', pady=2)
+        buttons[key] = btn
     return buttons
 
 
