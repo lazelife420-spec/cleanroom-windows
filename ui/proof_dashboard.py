@@ -255,6 +255,47 @@ def settings_card(parent, title: str, *, card_bg: str, accent: str) -> ctk.CTkFr
     return body
 
 
+def recent_proof_tile(
+    parent,
+    *,
+    title: str,
+    card_bg: str,
+    text_color: str,
+    muted: str,
+    accent: str,
+    command=None,
+) -> tuple[ctk.CTkFrame, ctk.CTkLabel]:
+    """Small recent-proof card; returns (frame, detail_label)."""
+    card = ctk_theme.frame(parent, card_bg, corner_radius=10)
+    inner = ctk_theme.frame(card, card_bg, corner_radius=10)
+    inner.pack(fill='both', expand=True, padx=12, pady=10)
+    ctk_theme.label(inner, title, text_color=muted, font_size=9, weight='bold').pack(anchor='w')
+    detail = ctk_theme.label(inner, '—', text_color=text_color, font_size=11, weight='bold')
+    detail.pack(anchor='w', pady=(4, 6))
+    if command:
+        ctk_theme.button(
+            inner, 'Open', command,
+            fg_color=accent, hover_color=accent, text_color=text_color,
+            width=64, height=24,
+        ).pack(anchor='w')
+    return card, detail
+
+
+def settings_section_nav(parent, labels: list[str], *, sidebar_bg: str, accent: str, muted: str, on_select):
+    """Segmented settings nav; returns dict label -> button."""
+    row = ctk_theme.frame(parent, sidebar_bg)
+    row.pack(fill='x', padx=12, pady=(0, 8))
+    buttons = {}
+    for label in labels:
+        btn = ctk_theme.button(
+            row, label, lambda l=label: on_select(l),
+            fg_color='transparent', hover_color=accent, text_color=muted, width=88,
+        )
+        btn.pack(side='left', padx=(0, 6))
+        buttons[label] = btn
+    return buttons
+
+
 def sidebar_section(parent, title: str, *, sidebar_bg: str, muted: str) -> ctk.CTkFrame:
     """Sidebar group label + container."""
     ctk_theme.label(

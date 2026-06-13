@@ -17,9 +17,9 @@ ARCHIVE_BANNER_TEXT = (
 
 TAB_CONTEXT = (
     {
-        'title': 'Review',
-        'description': 'Proof dashboard — see what needs attention before you archive anything.',
-        'next': 'Open Cleaner → Scan, then Preview Receipt before Archive & Clean.',
+        'title': 'Home',
+        'description': 'Proof home — see custody status and choose your next archive-first action.',
+        'next': 'Click Scan to review cleanup candidates, then Preview Receipt before Archive & Clean.',
     },
     {
         'title': 'Activity',

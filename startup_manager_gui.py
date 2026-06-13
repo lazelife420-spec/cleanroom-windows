@@ -19,7 +19,9 @@ from ui.proof_dashboard import (
     CommandBar,
     ProofDrawer,
     proof_card,
+    recent_proof_tile,
     settings_card,
+    settings_section_nav,
     sidebar_section,
     trust_card,
 )
@@ -357,6 +359,11 @@ class StartupManagerGUI(ctk.CTk):
         self._launch_logo = None
         self._tray = None
         self._initial_tab = initial_tab
+        self._tab_loaded = {0}
+        self._scan_session_done = False
+        self._cached_scan_count = 0
+        self._cached_scan_size = 0
+        self._cached_scan_at = ''
         self._archive_context_menu = None
         self._restore_context_menu = None
         self.protocol('WM_DELETE_WINDOW', self._on_window_close)
@@ -414,20 +421,61 @@ class StartupManagerGUI(ctk.CTk):
         self.lift()
         self.focus_force()
         self._update_responsive_layout()
+        self._load_scan_cache()
+        self._refresh_header_proof_badges()
+        self.refresh_dashboard()
+        self._set_status('Ready. Click Scan to review cleanup candidates.')
+        self._update_context_panel()
         if not animations_disabled():
             self._fade_in_window()
             self.after(350, self._pulse_proof_flow)
-        self.refresh()
-        self.refresh_cleanup()
-        self.refresh_restore()
-        self.refresh_optimizer()
-        self.refresh_activity()
-        self.refresh_uninstaller()
-        if foresight:
-            self._run_bg(foresight.record_snapshot,
-                         lambda result, err: self.refresh_foresight())
         self._init_tray()
         self._apply_initial_tab()
+        self.after(250, self._post_paint_launch_tasks)
+
+    def _scan_on_startup(self) -> bool:
+        return bool(load_ui_prefs().get('scan_on_startup', False))
+
+    def _load_scan_cache(self):
+        snap = load_ui_prefs().get('last_scan') or {}
+        self._cached_scan_count = int(snap.get('count', 0) or 0)
+        self._cached_scan_size = int(snap.get('total_size', 0) or 0)
+        self._cached_scan_at = str(snap.get('at', '') or '')
+
+    def _save_scan_cache(self):
+        prefs = load_ui_prefs()
+        prefs['last_scan'] = {
+            'count': len(self.cleanup_items),
+            'total_size': int(self.cleanup_total_size),
+            'at': datetime.now().strftime('%Y-%m-%d %H:%M'),
+        }
+        save_ui_prefs(prefs)
+        self._cached_scan_count = len(self.cleanup_items)
+        self._cached_scan_size = int(self.cleanup_total_size)
+        self._cached_scan_at = prefs['last_scan']['at']
+
+    def _post_paint_launch_tasks(self):
+        """Lightweight work after the window is visible — never block first paint."""
+        if self._scan_on_startup():
+            self.refresh_cleanup()
+        elif foresight:
+            self._run_bg(foresight.record_snapshot,
+                         lambda result, err: self.refresh_foresight())
+
+    def _lazy_load_tab(self, tab_idx: int):
+        if tab_idx in self._tab_loaded:
+            return
+        self._tab_loaded.add(tab_idx)
+        loaders = {
+            1: self.refresh_activity,
+            2: self.refresh,
+            4: self.refresh_uninstaller,
+            5: self.refresh_restore,
+            6: self.refresh_archive_browser,
+        }
+        loader = loaders.get(tab_idx)
+        if loader:
+            loader()
 
     def _init_tray(self):
         try:
@@ -790,7 +838,7 @@ class StartupManagerGUI(ctk.CTk):
         self.restore_tab = ttk.Frame(self.tab_control, style='Content.TFrame')
         self.archive_tab = ttk.Frame(self.tab_control, style='Content.TFrame')
         self.settings_tab = ttk.Frame(self.tab_control, style='Content.TFrame')
-        self.tab_control.add(self.optimizer_tab, text='  📋 Review  ')
+        self.tab_control.add(self.optimizer_tab, text='  🏠 Home  ')
         self.tab_control.add(self.activity_tab, text='  📋 Activity  ')
         self.tab_control.add(self.startup_tab, text='  🚀 Startup  ')
         self.tab_control.add(self.cleanup_tab, text='  🧹 Cleaner  ')
@@ -868,6 +916,7 @@ class StartupManagerGUI(ctk.CTk):
             ('Cleanroom Rewind', self.open_time_machine),
             ('Open Archive Tab', self.open_archive_browser_tab),
             ('Schedule Cleanup', self.schedule_optimization),
+            ('Telemetry…', self._show_telemetry_dialog),
         )
         self._command_bar = CommandBar(
             top,
@@ -962,7 +1011,7 @@ class StartupManagerGUI(ctk.CTk):
         row = ctk_theme.frame(bar, SIDEBAR_BG)
         row.pack(fill='x', padx=14, pady=8)
         self.ctx_title_lbl = ctk_theme.label(
-            row, 'Review', text_color=ACCENT, font_size=11, weight='bold')
+            row, 'Home', text_color=ACCENT, font_size=11, weight='bold')
         self.ctx_title_lbl.pack(side='left')
         self.ctx_subtitle_lbl = ctk_theme.label(
             row, '', text_color=MUTED, font_size=10)
@@ -1067,7 +1116,7 @@ class StartupManagerGUI(ctk.CTk):
         self._nav_buttons = []
         nav_groups = (
             ('Main', (
-                (0, '📋  Review', 'Proof dashboard — candidates, disk foresight, receipt preview.'),
+                (0, '🏠  Home', 'Proof home — custody status and next archive-first action.'),
                 (1, '📊  Activity', 'Activity ledger — every archive with timestamps.'),
                 (3, '🧹  Cleaner', 'Scan folders and archive reviewed files to custody.'),
                 (6, '🗂️  Archive', 'Archive custody — browse, delete, reclaim disk space.'),
@@ -1150,13 +1199,38 @@ class StartupManagerGUI(ctk.CTk):
                 btn.configure(fg_color='transparent', text_color=TEXT,
                               font=ctk_theme.font(11, 'normal'))
         self._update_context_panel()
+        self._lazy_load_tab(current)
 
     def _build_optimizer_tab(self):
-        self.optimizer_tab.grid_rowconfigure(2, weight=1)
+        self.optimizer_tab.grid_rowconfigure(4, weight=1)
         self.optimizer_tab.grid_columnconfigure(0, weight=1)
 
+        hero = ctk_theme.frame(self.optimizer_tab, CARD_BG, corner_radius=12)
+        hero.grid(row=0, column=0, sticky='ew', padx=10, pady=(8, 6))
+        hero_inner = ttk.Frame(hero, style='Card.TFrame')
+        hero_inner.pack(fill='x', padx=14, pady=12)
+        ttk.Label(hero_inner, text='Home', font=('Segoe UI', 14, 'bold'),
+                  background=CARD_BG).pack(anchor='w')
+        self.dashboard_msg_lbl = ttk.Label(
+            hero_inner,
+            text='Ready. Click Scan to review cleanup candidates.',
+            style='SubHeader.TLabel', wraplength=760,
+        )
+        self.dashboard_msg_lbl.pack(anchor='w', pady=(4, 8))
+        cta_row = ttk.Frame(hero_inner, style='Card.TFrame')
+        cta_row.pack(anchor='w')
+        self.dashboard_primary_btn = ttk.Button(
+            cta_row, text='Scan now', style='Primary.TButton', command=self.refresh_cleanup)
+        self.dashboard_primary_btn.pack(side='left')
+        self.dashboard_secondary_btn = ttk.Button(
+            cta_row, text='Open Activity', style='Action.TButton',
+            command=lambda: self._navigate_to_tab(1))
+        self.dashboard_secondary_btn.pack(side='left', padx=(8, 0))
+        self._add_tooltip(self.dashboard_primary_btn, 'Scan configured folders for cleanup candidates.')
+        self.preview_receipt_btn = self.dashboard_primary_btn
+
         cards = ttk.Frame(self.optimizer_tab, style='Content.TFrame')
-        cards.grid(row=0, column=0, sticky='ew', padx=10, pady=(6, 4))
+        cards.grid(row=1, column=0, sticky='ew', padx=10, pady=(0, 6))
         for col in range(4):
             cards.grid_columnconfigure(col, weight=1)
 
@@ -1182,58 +1256,44 @@ class StartupManagerGUI(ctk.CTk):
         self.stat_cleanup_value = self._stat_card_compact(cards, 2, 'Cleanup candidates')
         self.stat_size_value = self._stat_card_compact(cards, 3, 'Reclaimable space')
 
-        fs_card = tk.Frame(cards, bg=CARD_BG, highlightbackground=BORDER, highlightthickness=1)
-        fs_card.grid(row=1, column=0, columnspan=4, sticky='ew', pady=(6, 0))
-        fs_inner = tk.Frame(fs_card, bg=CARD_BG)
-        fs_inner.pack(fill='x', padx=10, pady=5)
-        tk.Label(fs_inner, text='DISK FORESIGHT', bg=CARD_BG, fg=MUTED,
-                 font=('Segoe UI', 7, 'bold')).pack(side='left')
+        recent = ttk.Frame(self.optimizer_tab, style='Content.TFrame')
+        recent.grid(row=2, column=0, sticky='ew', padx=10, pady=(0, 6))
+        ttk.Label(recent, text='Recent proof', font=('Segoe UI', 11, 'bold'),
+                  background=BG).pack(anchor='w', pady=(0, 4))
+        recent_row = ttk.Frame(recent, style='Content.TFrame')
+        recent_row.pack(fill='x')
+        for col in range(3):
+            recent_row.grid_columnconfigure(col, weight=1)
+        tile_kw = dict(card_bg=CARD_BG, text_color=TEXT, muted=MUTED, accent=ACCENT)
+        rc, self.recent_receipt_lbl = recent_proof_tile(
+            recent_row, title='Latest receipt', command=self.open_last_receipt, **tile_kw)
+        rc.grid(row=0, column=0, sticky='ew', padx=(0, 8))
+        ac, self.recent_archive_lbl = recent_proof_tile(
+            recent_row, title='Latest archive action', command=self.open_archive_browser_tab, **tile_kw)
+        ac.grid(row=0, column=1, sticky='ew', padx=(0, 8))
+        pc, self.recent_proofpack_lbl = recent_proof_tile(
+            recent_row, title='Latest proof pack', command=self.export_audit, **tile_kw)
+        pc.grid(row=0, column=2, sticky='ew')
+
+        fs_card = ctk_theme.frame(self.optimizer_tab, CARD_BG, corner_radius=10)
+        fs_card.grid(row=3, column=0, sticky='ew', padx=10, pady=(0, 6))
+        fs_inner = ttk.Frame(fs_card, style='Card.TFrame')
+        fs_inner.pack(fill='x', padx=12, pady=8)
+        ttk.Label(fs_inner, text='Disk foresight', font=('Segoe UI', 9, 'bold'),
+                  background=CARD_BG).pack(side='left')
         self.foresight_lbl = tk.Label(fs_inner, text='Collecting…', bg=CARD_BG, fg=TEXT,
                                       font=('Segoe UI', 10, 'bold'))
-        self.foresight_lbl.pack(side='left', padx=(8, 0))
+        self.foresight_lbl.pack(side='left', padx=(10, 0))
         self.foresight_sub_lbl = tk.Label(fs_inner, text='', bg=CARD_BG, fg=MUTED,
                                           font=('Segoe UI', 9))
         self.foresight_sub_lbl.pack(side='left', padx=(8, 0))
-        self.foresight_canvas = tk.Canvas(fs_card, width=120, height=40, bg=CARD_BG,
-                                          highlightthickness=0)
-        self.foresight_canvas.pack(side='right', padx=(0, 10), pady=4)
-        self._add_tooltip(fs_card, 'Free-space trend and disk-full prediction.')
-
-        qa = ctk_theme.frame(self.optimizer_tab, CARD_BG, corner_radius=10)
-        qa.grid(row=1, column=0, sticky='ew', padx=10, pady=(0, 4))
-        qa_inner = ttk.Frame(qa, style='Card.TFrame')
-        qa_inner.pack(fill='x', padx=10, pady=6)
-        qa_grid = ttk.Frame(qa_inner, style='Card.TFrame')
-        qa_grid.pack(fill='x')
-        qa_specs = (
-            ('Preview Receipt', self.preview_cleanup_receipt, 'Primary.TButton'),
-            ('Schedule Cleanup', self.schedule_optimization, 'Action.TButton'),
-            ('Open Archive Folder', self.open_archive_folder, 'Action.TButton'),
-            ('Open Cleanup Log', self.open_cleanup_log, 'Action.TButton'),
-        )
-        btn_refs = []
-        for i, (label, cmd, style) in enumerate(qa_specs):
-            btn = ttk.Button(qa_grid, text=label, command=cmd, style=style)
-            btn.grid(row=0, column=i, sticky='ew', padx=3, pady=2)
-            btn_refs.append(btn)
-        for col in range(4):
-            qa_grid.columnconfigure(col, weight=1)
-        (self.preview_receipt_btn, self.schedule_btn, self.open_archive_btn,
-         self.open_log_btn) = btn_refs
-        self.prune_btn = self.open_archive_btn
-        self.receipt_btn = self.preview_receipt_btn
-        self.reg_health_btn = self.schedule_btn
-        self.telemetry_btn = self.open_log_btn
-        self._add_tooltip(self.preview_receipt_btn, 'See what the receipt will record before archiving.')
-        self._add_tooltip(self.schedule_btn, 'Schedule recurring cleanup runs via Task Scheduler.')
-        self._add_tooltip(self.open_archive_btn, 'Open the configured archive folder in Explorer.')
-        self._add_tooltip(self.open_log_btn, 'Open cleanup_log.json.')
+        self._add_tooltip(fs_card, 'Free-space trend summary — text only, no chart.')
 
         rec_card = ttk.Frame(self.optimizer_tab, style='Card.TFrame')
-        rec_card.grid(row=2, column=0, sticky='nsew', padx=10, pady=(0, 8))
+        rec_card.grid(row=4, column=0, sticky='nsew', padx=10, pady=(0, 8))
         rec_card.grid_rowconfigure(1, weight=1)
         rec_card.grid_columnconfigure(0, weight=1)
-        ttk.Label(rec_card, text='What Cleanroom found', font=('Segoe UI', 11, 'bold'),
+        ttk.Label(rec_card, text='Recommendations', font=('Segoe UI', 11, 'bold'),
                   background=CARD_BG).grid(row=0, column=0, sticky='w', padx=10, pady=(6, 2))
         rec_body = ttk.Frame(rec_card, style='Card.TFrame')
         rec_body.grid(row=1, column=0, sticky='nsew', padx=10, pady=(0, 8))
@@ -1272,8 +1332,15 @@ class StartupManagerGUI(ctk.CTk):
         self.rec_empty_hint = self._make_empty_hint(
             self.rec_tree,
             'No findings yet.\n\n'
-            'Click Scan in the toolbar to search your configured folders.\n'
+            'Click Scan to search your configured folders.\n'
             'Cleanroom only shows reviewed candidates — every move gets a receipt.')
+        self.schedule_btn = self.dashboard_secondary_btn
+        self.open_archive_btn = self.dashboard_secondary_btn
+        self.open_log_btn = self.dashboard_secondary_btn
+        self.prune_btn = self.dashboard_secondary_btn
+        self.receipt_btn = self.dashboard_primary_btn
+        self.reg_health_btn = self.dashboard_secondary_btn
+        self.telemetry_btn = self.dashboard_secondary_btn
 
     def _build_activity_tab(self):
         """Proof ledger — every action Cleanroom ever took, with custody status."""
@@ -1771,7 +1838,6 @@ class StartupManagerGUI(ctk.CTk):
             fc = foresight.forecast(history)
         except Exception:
             return
-        self._draw_foresight_sparkline(history)
         if fc['free'] is None:
             self.foresight_lbl.config(text='Collecting data…', fg=TEXT)
             self.foresight_sub_lbl.config(text='Run Cleanroom a few days in a row.')
@@ -1796,30 +1862,7 @@ class StartupManagerGUI(ctk.CTk):
             self.foresight_sub_lbl.config(text=f'{free_txt} free and not shrinking.')
 
     def _draw_foresight_sparkline(self, history):
-        c = self.foresight_canvas
-        c.delete('all')
-        try:
-            pts = foresight._points(history)
-        except Exception:
-            pts = []
-        w, h, pad = 150, 56, 6
-        if len(pts) < 2:
-            c.create_text(w / 2, h / 2, text='no trend yet', fill=MUTED,
-                          font=('Segoe UI', 8, 'italic'))
-            return
-        xs = [p[0] for p in pts]
-        ys = [p[1] for p in pts]
-        x_span = (xs[-1] - xs[0]) or 1.0
-        y_min, y_max = min(ys), max(ys)
-        y_span = (y_max - y_min) or 1.0
-        coords = []
-        for x, y in pts:
-            px = pad + (x - xs[0]) / x_span * (w - 2 * pad)
-            py = (h - pad) - (y - y_min) / y_span * (h - 2 * pad)
-            coords.extend((px, py))
-        c.create_line(*coords, fill=ACCENT, width=2, smooth=True)
-        c.create_oval(coords[-2] - 3, coords[-1] - 3, coords[-2] + 3, coords[-1] + 3,
-                      fill=ACCENT, outline='')
+        return  # sparkline removed — foresight is text-only on the dashboard
 
     def _build_startup_tab(self):
         head = ttk.Frame(self.startup_tab, style='Content.TFrame')
@@ -2161,13 +2204,50 @@ class StartupManagerGUI(ctk.CTk):
             text_color=MUTED, font_size=11,
         ).pack(anchor='w', pady=(4, 0))
 
-        local_body = settings_card(host, 'Local-only', card_bg=CARD_BG, accent=ACCENT)
+        sections_wrap = ctk_theme.frame(host, BG)
+        sections_wrap.pack(fill='both', expand=True)
+        self._settings_section_frames = {}
+        for name in ('General', 'Scan', 'Archive', 'Explorer', 'Advanced'):
+            frame = ctk_theme.frame(sections_wrap, BG)
+            self._settings_section_frames[name] = frame
+
+        def _select_settings_section(name):
+            for key, frame in self._settings_section_frames.items():
+                if key == name:
+                    frame.pack(fill='both', expand=True)
+                else:
+                    frame.pack_forget()
+            for key, btn in self._settings_nav_btns.items():
+                if key == name:
+                    btn.configure(fg_color=ACCENT_SOFT, text_color=ACCENT)
+                else:
+                    btn.configure(fg_color='transparent', text_color=MUTED)
+
+        self._settings_nav_btns = settings_section_nav(
+            host,
+            ['General', 'Scan', 'Archive', 'Explorer', 'Advanced'],
+            sidebar_bg=BG, accent=ACCENT_SOFT, muted=MUTED,
+            on_select=_select_settings_section,
+        )
+        _select_settings_section('General')
+
+        local_body = settings_card(
+            self._settings_section_frames['General'], 'Local-only', card_bg=CARD_BG, accent=ACCENT)
         ctk_theme.label(
             local_body, ctk_theme.LOCAL_ONLY_TEXT, text_color=TEXT, font_size=11,
             wraplength=720, justify='left',
         ).pack(anchor='w')
 
-        shell_body = settings_card(host, 'Explorer integration', card_bg=CARD_BG, accent=ACCENT)
+        self.set_scan_on_startup = tk.BooleanVar(
+            value=bool(load_ui_prefs().get('scan_on_startup', False)))
+        ctk_theme.switch(
+            local_body, 'Scan on startup (default off)', self.set_scan_on_startup,
+            text_color=TEXT, progress_color=ACCENT,
+            button_color=BORDER, button_hover_color=ACCENT,
+        ).pack(anchor='w', pady=(10, 0))
+
+        shell_body = settings_card(
+            self._settings_section_frames['Explorer'], 'Explorer integration', card_bg=CARD_BG, accent=ACCENT)
         ctk_theme.label(
             shell_body,
             'Build Windows Explorer right-click menus (per-user HKCU). Choose presets, '
@@ -2187,7 +2267,8 @@ class StartupManagerGUI(ctk.CTk):
         self.set_dedupe_default = self.dedupe_enabled
         self.set_power_var = tk.BooleanVar(value=bool(load_ui_prefs().get('power_user')))
 
-        scan_body = settings_card(host, 'Scan folders', card_bg=CARD_BG, accent=ACCENT)
+        scan_body = settings_card(
+            self._settings_section_frames['Scan'], 'Scan folders', card_bg=CARD_BG, accent=ACCENT)
         ctk_theme.label(
             scan_body,
             'Folders Cleanroom scans, age thresholds, and quick toggles. Save Settings to apply.',
@@ -2265,7 +2346,8 @@ class StartupManagerGUI(ctk.CTk):
         _quick_switch(1, 1, 'Deduplicate before archive', self.set_dedupe_default)
         _quick_switch(2, 0, 'Power user mode (dense lists)', self.set_power_var)
 
-        archive_body = settings_card(host, 'Archive custody', card_bg=CARD_BG, accent=ACCENT)
+        archive_body = settings_card(
+            self._settings_section_frames['Archive'], 'Archive custody', card_bg=CARD_BG, accent=ACCENT)
         ctk_theme.label(
             archive_body,
             'Control when archived copies become safe to delete. Deleting from archive removes '
@@ -2288,7 +2370,8 @@ class StartupManagerGUI(ctk.CTk):
         ttk.Button(archive_btns, text='Show Safe to Delete…', style='Action.TButton',
                    command=self.prune_archive_dialog).pack(side='left', padx=(8, 0))
 
-        receipt_body = settings_card(host, 'Receipt files', card_bg=CARD_BG, accent=ACCENT)
+        receipt_body = settings_card(
+            self._settings_section_frames['Advanced'], 'Receipt files', card_bg=CARD_BG, accent=ACCENT)
         ctk_theme.label(
             receipt_body,
             'Cleanroom writes human-readable .cleanroom-receipt files after each archive. '
@@ -2326,7 +2409,8 @@ class StartupManagerGUI(ctk.CTk):
         apply_ui_btn.grid(row=6, column=2, sticky='w', padx=(6, 0), pady=(10, 3))
         self._add_tooltip(apply_ui_btn, 'Applies instantly — the window rebuilds with the new look.')
 
-        safety_body = settings_card(host, 'Advanced safety rules', card_bg=CARD_BG, accent=ACCENT)
+        safety_body = settings_card(
+            self._settings_section_frames['Advanced'], 'Advanced safety rules', card_bg=CARD_BG, accent=ACCENT)
         ctk_theme.label(
             safety_body,
             'Exclude patterns and whitelist entries Cleanroom must never touch during scan.',
@@ -2442,6 +2526,7 @@ class StartupManagerGUI(ctk.CTk):
         self.set_whitelist_text.delete('1.0', 'end')
         self.set_whitelist_text.insert('1.0', '\n'.join(cfg.get('whitelist', []) or []))
         self.set_prune_recent_days.set(int(cfg.get('prune_recent_days', 7)))
+        self.set_scan_on_startup.set(bool(load_ui_prefs().get('scan_on_startup', False)))
         self.settings_status_lbl.config(text=self._config_status_label())
 
     def save_settings(self):
@@ -2468,14 +2553,16 @@ class StartupManagerGUI(ctk.CTk):
             'prune_recent_days': int(self.set_prune_recent_days.get()),
         })
         self.dedupe_enabled.set(bool(self.set_dedupe_default.get()))
+        prefs = load_ui_prefs()
+        prefs['scan_on_startup'] = bool(self.set_scan_on_startup.get())
+        save_ui_prefs(prefs)
         try:
             written_to = self._write_config(cfg)
         except Exception as e:
             messagebox.showerror('Settings', f'Unable to save settings:\n{e}')
             return
         self.settings_status_lbl.config(text='Cleanroom configuration saved')
-        self._set_status('Settings saved. Re-scanning with new configuration...')
-        self.refresh_cleanup()
+        self._set_status('Settings saved. Click Scan to apply new paths.')
 
     def _write_config(self, cfg):
         """Write config to the active path; fall back to the per-user copy if
@@ -3460,6 +3547,8 @@ class StartupManagerGUI(ctk.CTk):
 
         self.scan_btn.config(state='disabled')
         self.tb_scan.configure(state='disabled')
+        if hasattr(self, 'dashboard_primary_btn'):
+            self.dashboard_primary_btn.config(state='disabled')
         self.cleanup_status_lbl.config(text='Scanning...')
         self._set_status('Scanning configured folders for cleanup candidates...')
         self.cleanup_progress.pack(side='left', padx=12)
@@ -3470,6 +3559,8 @@ class StartupManagerGUI(ctk.CTk):
             self.cleanup_progress.pack_forget()
             self.scan_btn.config(state='normal')
             self.tb_scan.configure(state='normal')
+            if hasattr(self, 'dashboard_primary_btn'):
+                self.dashboard_primary_btn.config(state='normal')
             if err is not None:
                 self.cleanup_status_lbl.config(text=f'Scan failed: {err}')
                 self._set_status('Scan failed.')
@@ -3480,7 +3571,9 @@ class StartupManagerGUI(ctk.CTk):
             self._last_cfg = cfg
             self._update_cleanup_summary(cfg)
             self._update_cleanup_tree()
-            self.refresh_optimizer()
+            self._scan_session_done = True
+            self._save_scan_cache()
+            self.refresh_dashboard()
             self.cleanup_status_lbl.config(text=f'Found {len(items)} candidate(s) across configured paths.')
             self._set_status(f'Scan complete — {len(items)} candidate(s).', pulse=True)
             self._update_context_panel()
@@ -3716,7 +3809,6 @@ class StartupManagerGUI(ctk.CTk):
             self.activity_empty.place_forget()
         else:
             self.activity_empty.place(relx=0.5, rely=0.4, anchor='center')
-        self.refresh_archive_browser()
 
     def open_archive_browser_tab(self):
         self.tab_control.select(self.archive_tab)
@@ -4833,7 +4925,7 @@ class StartupManagerGUI(ctk.CTk):
             entries = [e for e in entries if filter_text in (e[0] or '').lower() or filter_text in (e[1] or '').lower()]
         self.restore_entries = entries
         self._update_restore_tree()
-        self.refresh_optimizer()
+        self.refresh_dashboard()
         self.refresh_activity()
         self.restore_status_lbl.config(text=f'Loaded {len(entries)} restore entries.')
 
@@ -5009,13 +5101,14 @@ class StartupManagerGUI(ctk.CTk):
         self.refresh_restore()
 
     # ------------------------------------------------------------------
-    # Review tab / recommendations
+    # Dashboard / recommendations
     # ------------------------------------------------------------------
-    def refresh_optimizer(self):
+    def refresh_dashboard(self):
         folder_count = len(self.data.get('folders', []))
         registry_count = len(self.data.get('registry', []))
         startup_count = folder_count + registry_count
-        cleanup_count = len(self.cleanup_items)
+        cleanup_count = len(self.cleanup_items) if self._scan_session_done else self._cached_scan_count
+        display_size = self.cleanup_total_size if self._scan_session_done else self._cached_scan_size
         reason_counts = {}
         for item in self.cleanup_items:
             reason = item.get('reason') or 'other'
@@ -5026,7 +5119,7 @@ class StartupManagerGUI(ctk.CTk):
                 folder_count=folder_count,
                 registry_count=registry_count,
                 cleanup_count=cleanup_count,
-                cleanup_bytes=self.cleanup_total_size,
+                cleanup_bytes=display_size,
                 restore_count=len(self.restore_entries),
                 reason_counts=reason_counts)
         else:
@@ -5046,7 +5139,7 @@ class StartupManagerGUI(ctk.CTk):
         self.health_band_lbl.config(text=band_text, fg=tone)
         self.stat_startup_value.config(text=str(startup_count))
         self.stat_cleanup_value.config(text=str(cleanup_count))
-        self.stat_size_value.config(text=self._format_size(self.cleanup_total_size))
+        self.stat_size_value.config(text=self._format_size(display_size))
 
         self.rec_tree.delete(*self.rec_tree.get_children())
         for r in recs:
@@ -5057,14 +5150,87 @@ class StartupManagerGUI(ctk.CTk):
 
         self.refresh_foresight()
         self._refresh_header_proof_badges()
+        self._update_dashboard_cta()
+        self._update_recent_proof()
 
-        try:
-            if enable_telemetry and enable_telemetry.is_opted_in():
-                self.telemetry_btn.config(text='Telemetry (On)')
+    refresh_optimizer = refresh_dashboard
+
+    def _update_dashboard_cta(self):
+        if not hasattr(self, 'dashboard_primary_btn'):
+            return
+        custody = {'verified': 0, 'total': 0, 'missing': 0}
+        entries = self._load_log_dicts()
+        if proof_module and entries:
+            try:
+                custody = proof_module.verify_entries(entries)
+            except Exception:
+                pass
+        if self.cleanup_items:
+            checked = len(self.cleanup_selected)
+            msg = f'{len(self.cleanup_items)} candidate(s) · {checked} checked · {self._format_size(self.cleanup_total_size)} reclaimable'
+            if checked:
+                self.dashboard_primary_btn.configure(
+                    text='Preview Receipt', command=self.preview_cleanup_receipt)
+                self.dashboard_msg_lbl.config(
+                    text=f'{msg}. Preview the receipt, then Archive & Clean.')
             else:
-                self.telemetry_btn.config(text='Telemetry')
-        except Exception:
-            pass
+                self.dashboard_primary_btn.configure(
+                    text='Archive & Clean', command=self.apply_cleanup)
+                self.dashboard_msg_lbl.config(text=f'{msg}. Check items on Cleaner, then archive.')
+        elif self._scan_session_done or self._cached_scan_count:
+            cache_note = f' (last scan {self._cached_scan_at})' if self._cached_scan_at else ''
+            self.dashboard_primary_btn.configure(text='Scan now', command=self.refresh_cleanup)
+            self.dashboard_msg_lbl.config(
+                text=f'Last scan found no current candidates{cache_note}. Click Scan to refresh.')
+        elif custody.get('missing', 0):
+            self.dashboard_primary_btn.configure(
+                text='Review custody', command=lambda: self._navigate_to_tab(1))
+            self.dashboard_msg_lbl.config(
+                text=f'{custody["missing"]} archived artifact(s) missing on disk — review Activity.')
+        else:
+            self.dashboard_primary_btn.configure(text='Scan now', command=self.refresh_cleanup)
+            self.dashboard_msg_lbl.config(
+                text='Ready. Click Scan to review cleanup candidates.')
+        self.preview_receipt_btn = self.dashboard_primary_btn
+
+    def _update_recent_proof(self):
+        if not hasattr(self, 'recent_receipt_lbl'):
+            return
+        receipt_path = None
+        if receipts_module:
+            try:
+                receipt_path = receipts_module.latest_receipt()
+            except Exception:
+                pass
+        if receipt_path:
+            stamp = receipt_path.stem.replace('receipt_', '')
+            if len(stamp) >= 8:
+                stamp = f'{stamp[:4]}-{stamp[4:6]}-{stamp[6:8]}'
+            self.recent_receipt_lbl.configure(text=stamp)
+        else:
+            self.recent_receipt_lbl.configure(text='None yet')
+
+        entries = self._load_log_dicts()
+        archive_entry = None
+        for e in reversed(entries):
+            if e.get('kind') not in ('restore', 'prune'):
+                archive_entry = e
+                break
+        if archive_entry:
+            when = (archive_entry.get('when') or '')[:19].replace('T', ' ')
+            self.recent_archive_lbl.configure(text=when or 'Logged')
+        else:
+            self.recent_archive_lbl.configure(text='None yet')
+
+        audit_dir = brand.user_data_dir() / 'audits'
+        latest_audit = None
+        if audit_dir.is_dir():
+            audits = sorted(audit_dir.glob('audit_*.html'), key=lambda p: p.stat().st_mtime, reverse=True)
+            latest_audit = audits[0] if audits else None
+        if latest_audit:
+            self.recent_proofpack_lbl.configure(text=latest_audit.stem.replace('audit_', ''))
+        else:
+            self.recent_proofpack_lbl.configure(text='None yet')
 
     def open_archive_folder(self):
         cfg = self._load_cleanup_config()
@@ -5241,7 +5407,7 @@ class StartupManagerGUI(ctk.CTk):
             try:
                 if enable_telemetry:
                     enable_telemetry.set_opt_in(bool(var.get()))
-                self.refresh_optimizer()
+                self.refresh_dashboard()
                 messagebox.showinfo('Telemetry', 'Telemetry preference saved.', parent=dlg)
             except Exception as e:
                 messagebox.showerror('Telemetry', f'Unable to save preference:\n{e}', parent=dlg)
@@ -5391,7 +5557,7 @@ class StartupManagerGUI(ctk.CTk):
             self._update_summary()
             self._update_detail()
             self._update_actions()
-            self.refresh_optimizer()
+            self.refresh_dashboard()
             total = len(data.get('folders', [])) + len(data.get('registry', []))
             self.status_lbl.config(text=f'{total} entries')
             self._set_status(f'Startup list refreshed: {total} entries.')

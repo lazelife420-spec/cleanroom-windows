@@ -130,6 +130,12 @@ def sandbox(tmp_path, monkeypatch):
     app = gui_module.StartupManagerGUI(config_path=cfg_path, restore_log_path=log_path)
     app.update_idletasks()
     app._finish_launch_sequence()
+    app.refresh_cleanup()
+    assert pump(app, lambda: getattr(app, '_scan_session_done', False), timeout=30), \
+        'startup scan did not finish'
+    for tab_idx in (2, 4, 5):
+        app._lazy_load_tab(tab_idx)
+        app.update()
     app.withdraw()
     try:
         yield {
@@ -341,6 +347,8 @@ def test_restore_preview_pane_shows_details(sandbox):
 
 def test_uninstaller_tab_lists_programs_and_filters(sandbox):
     app = sandbox['app']
+    app.tab_control.select(app.uninstall_tab)
+    app.update()
     # The live registry scan should find at least one installed program.
     assert pump(app, lambda: len(app.uninstall_entries) > 0), \
         'expected installed programs from the registry'
