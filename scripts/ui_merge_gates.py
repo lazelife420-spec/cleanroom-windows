@@ -140,6 +140,14 @@ def check_layout(app, width: int, height: int, label: str, *, check_settings: bo
         app._update_responsive_layout()
     time.sleep(0.15)
 
+    try:
+        app.tab_control.select(0)
+        if hasattr(app, '_update_page_chrome'):
+            app._update_page_chrome(0)
+        app.update_idletasks()
+    except Exception:
+        pass
+
     issues: list[str] = []
     for attr, name in TOOLBAR_LABELS:
         widget = getattr(app, attr)

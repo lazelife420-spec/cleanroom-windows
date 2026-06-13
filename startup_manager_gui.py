@@ -368,6 +368,7 @@ class StartupManagerGUI(ctk.CTk):
         self._archive_context_menu = None
         self._restore_context_menu = None
         self._chunk_tokens = {}
+        self._page_is_dashboard = True
         self.protocol('WM_DELETE_WINDOW', self._on_window_close)
         self.after(50, self._poll_bg_queue)
 
@@ -454,6 +455,7 @@ class StartupManagerGUI(ctk.CTk):
             self.after(350, self._pulse_proof_flow)
         self._init_tray()
         self._apply_initial_tab()
+        self._update_page_chrome()
         self.after(250, self._post_paint_launch_tasks)
 
     def _scan_on_startup(self) -> bool:
@@ -628,10 +630,18 @@ class StartupManagerGUI(ctk.CTk):
                 else:
                     self._hdr_hero.grid(row=0, column=4, sticky='e', padx=(8, 0), pady=0)
         if hasattr(self, '_archive_banner'):
-            if h < 620:
-                self._archive_banner.pack_forget()
-            else:
+            show_banner = getattr(self, '_page_is_dashboard', True) and h >= 620
+            try:
+                if self.tab_control.index('current') in (0, 3):
+                    show_banner = show_banner and True
+                else:
+                    show_banner = False
+            except Exception:
+                pass
+            if show_banner:
                 self._archive_banner.pack(fill='x', pady=(8, 0))
+            else:
+                self._archive_banner.pack_forget()
         if hasattr(self, '_home_recent'):
             if h < 660:
                 self._home_recent.grid_remove()
@@ -904,11 +914,11 @@ class StartupManagerGUI(ctk.CTk):
                     foreground=TEXT, relief='flat')
         s.map('Treeview.Heading', background=[('active', ACCENT_SOFT)])
         row_h, tree_font = (20, ('Segoe UI', 9)) if self.power_user else (24, ('Segoe UI', 10))
-        s.configure('Treeview', font=tree_font, rowheight=row_h, background=CARD_BG,
-                    foreground=TEXT, fieldbackground=CARD_BG, bordercolor=BORDER)
+        s.configure('Treeview', font=tree_font, rowheight=row_h + 2, background=CARD_BG,
+                    foreground=TEXT, fieldbackground=CARD_BG, borderwidth=0)
         s.map('Treeview',
-              background=[('selected', ACCENT)],
-              foreground=[('selected', ON_ACCENT)])
+              background=[('selected', ACCENT_SOFT)],
+              foreground=[('selected', TEXT)])
         badge_fg = ACCENT_DARK if CURRENT_THEME == 'light' else ACCENT
         s.configure('Badge.TLabel', font=('Segoe UI', 10, 'bold'), background=ACCENT_SOFT,
                     foreground=badge_fg, padding=(8, 4))
@@ -1109,6 +1119,17 @@ class StartupManagerGUI(ctk.CTk):
             on_why=self._show_custody_trust_why,
         )
         self._hdr_hero.grid(row=0, column=4, sticky='e', padx=(8, 0))
+
+        self._hdr_compact = ctk_theme.frame(top, CARD_BG, corner_radius=8)
+        self._hdr_compact_inner = ctk_theme.frame(self._hdr_compact, CARD_BG)
+        self._hdr_compact_inner.pack(fill='x', padx=12, pady=6)
+        self._hdr_compact_trust = ctk_theme.label(
+            self._hdr_compact_inner, 'Custody trust —', text_color=TEXT, font_size=10, weight='bold')
+        self._hdr_compact_trust.pack(side='left')
+        self._hdr_compact_detail = ctk_theme.label(
+            self._hdr_compact_inner, '', text_color=MUTED, font_size=10)
+        self._hdr_compact_detail.pack(side='left', padx=(10, 0))
+        self._hdr_compact.pack_forget()
 
         self._add_tooltip(measured_card,
                           'Measured = logged actions in your history.\n'
@@ -1344,7 +1365,41 @@ class StartupManagerGUI(ctk.CTk):
         prefs['last_tab'] = current
         save_ui_prefs(prefs)
         self._update_context_panel()
+        self._update_page_chrome(current)
         self._lazy_load_tab(current)
+
+    def _update_page_chrome(self, tab_idx=None):
+        """Home shows the full proof dashboard; other tabs use a compact workspace header."""
+        if tab_idx is None:
+            try:
+                tab_idx = self.tab_control.index('current')
+            except Exception:
+                tab_idx = 0
+        dashboard = tab_idx == 0
+        self._page_is_dashboard = dashboard
+        try:
+            if dashboard:
+                if hasattr(self, '_hdr_summary'):
+                    self._hdr_summary.pack(fill='x', pady=(10, 0))
+                if hasattr(self, '_hdr_compact'):
+                    self._hdr_compact.pack_forget()
+                if hasattr(self, '_hdr_tagline_lbl'):
+                    self._hdr_tagline_lbl.pack(anchor='w', pady=(4, 0))
+            else:
+                if hasattr(self, '_hdr_summary'):
+                    self._hdr_summary.pack_forget()
+                if hasattr(self, '_hdr_compact'):
+                    self._hdr_compact.pack(fill='x', pady=(6, 0))
+                if hasattr(self, '_hdr_tagline_lbl'):
+                    self._hdr_tagline_lbl.pack_forget()
+                if hasattr(self, '_archive_banner'):
+                    self._archive_banner.pack_forget()
+            if hasattr(self, '_context_bar'):
+                self._context_bar.pack(fill='x', padx=14, pady=(0, 8))
+        except Exception:
+            pass
+        if hasattr(self, '_update_responsive_layout'):
+            self._update_responsive_layout()
 
     def _build_optimizer_tab(self):
         self.optimizer_tab.grid_rowconfigure(4, weight=1)
@@ -1696,36 +1751,44 @@ class StartupManagerGUI(ctk.CTk):
 
         qa_primary = ttk.Frame(qa_inner, style='Card.TFrame')
         qa_primary.pack(fill='x')
+        ttk.Label(qa_primary, text='Review & restore', style='CardInfo.TLabel').pack(
+            side='left', padx=(0, 10))
         ttk.Button(qa_primary, text='↩ Restore Selected', style='Primary.TButton',
                    command=self._archive_restore_selected).pack(side='left', padx=(0, 6))
-        self.delete_archive_btn = ttk.Button(
-            qa_primary, text='Delete from Archive…', style='Primary.TButton',
-            command=self.confirm_prune_selected)
-        self.delete_archive_btn.pack(side='left', padx=(0, 6))
-        self._add_tooltip(self.delete_archive_btn,
-                          'Permanently delete selected archived copies. Original live files untouched.')
+        ttk.Button(qa_primary, text='Open Archive Folder', style='Action.TButton',
+                   command=self.open_archive_folder).pack(side='left', padx=(0, 6))
+        ttk.Button(qa_primary, text='Refresh', style='Action.TButton',
+                   command=self.refresh_archive_browser).pack(side='left')
 
         qa_bulk = ttk.Frame(qa_inner, style='Card.TFrame')
         qa_bulk.pack(fill='x', pady=(6, 0))
+        ttk.Label(qa_bulk, text='Select', style='CardInfo.TLabel').pack(side='left', padx=(0, 10))
         ttk.Button(qa_bulk, text='Select All Safe', style='Action.TButton',
                    command=self._archive_select_all_safe).pack(side='left', padx=(0, 6))
         ttk.Button(qa_bulk, text='Select Visible', style='Action.TButton',
                    command=self._archive_select_visible).pack(side='left', padx=(0, 6))
-        ttk.Button(qa_bulk, text='Delete All Safe…', style='Action.TButton',
-                   command=self.confirm_delete_all_safe).pack(side='left', padx=(0, 6))
-        ttk.Button(qa_bulk, text='Delete Older Than…', style='Action.TButton',
-                   command=self.confirm_delete_older_than).pack(side='left', padx=(0, 6))
         ttk.Button(qa_bulk, text='Clear Selection', style='Action.TButton',
                    command=self._archive_clear_selection).pack(side='left')
 
+        qa_delete = ttk.Frame(qa_inner, style='Card.TFrame')
+        qa_delete.pack(fill='x', pady=(6, 0))
+        ttk.Label(qa_delete, text='Delete from archive', style='CardInfo.TLabel').pack(
+            side='left', padx=(0, 10))
+        self.delete_archive_btn = ttk.Button(
+            qa_delete, text='Delete Selected…', style='Action.TButton',
+            command=self.confirm_prune_selected)
+        self.delete_archive_btn.pack(side='left', padx=(0, 6))
+        self._add_tooltip(self.delete_archive_btn,
+                          'Permanently delete selected archived copies. Original live files untouched.')
+        ttk.Button(qa_delete, text='Delete All Safe…', style='Action.TButton',
+                   command=self.confirm_delete_all_safe).pack(side='left', padx=(0, 6))
+        ttk.Button(qa_delete, text='Delete Older Than…', style='Action.TButton',
+                   command=self.confirm_delete_older_than).pack(side='left', padx=(0, 6))
+
         qa_secondary = ttk.Frame(qa_inner, style='Card.TFrame')
         qa_secondary.pack(fill='x', pady=(6, 0))
-        ttk.Button(qa_secondary, text='Open Archive Folder', style='Action.TButton',
-                   command=self.open_archive_folder).pack(side='left', padx=(0, 6))
         ttk.Button(qa_secondary, text='Archive Settings…', style='Action.TButton',
-                   command=self._open_archive_settings).pack(side='left', padx=(0, 6))
-        ttk.Button(qa_secondary, text='Refresh', style='Action.TButton',
-                   command=self.refresh_archive_browser).pack(side='left')
+                   command=self._open_archive_settings).pack(side='left')
 
         filter_bar = ttk.Frame(self.archive_tab, style='Content.TFrame')
         filter_bar.grid(row=3, column=0, sticky='ew', padx=10, pady=(0, 4))
@@ -1910,6 +1973,24 @@ class StartupManagerGUI(ctk.CTk):
             self.hdr_receipt_lbl.configure(text=stamp)
         else:
             self.hdr_receipt_lbl.configure(text='Not generated')
+        if hasattr(self, '_hdr_compact_trust'):
+            if trust is not None:
+                self._hdr_compact_trust.configure(text=f'Custody trust {trust}%')
+                self._hdr_compact_detail.configure(
+                    text=f'{custody.get("verified", 0):,}/{custody.get("total", 0):,} verified · '
+                         f'{self._format_size(custody.get("bytes_in_custody", 0))} in custody')
+            else:
+                self._hdr_compact_trust.configure(text='Custody trust —')
+                self._hdr_compact_detail.configure(text='No archive custody yet')
+
+    def _menu_entry_state(self, menu, index, enabled: bool):
+        """Enable/disable a menu row without touching separators (avoids TclError)."""
+        try:
+            if menu.type(index) != 'command':
+                return
+            menu.entryconfig(index, state='normal' if enabled else 'disabled')
+        except (tk.TclError, Exception):
+            pass
 
     def _play_receipt_animation(self, stamp, on_complete=None, lines=None, duration_ms=900):
         """Short proof-output animation on the Review tab; non-blocking."""
@@ -2848,9 +2929,19 @@ class StartupManagerGUI(ctk.CTk):
         self.set_confirm_gb.set(round((cfg.get('confirm_threshold_bytes') or 5 * 1024 ** 3) / 1024 ** 3, 2))
         self.set_ext_var.set(', '.join(cfg.get('extensions_archive', []) or []))
         self.set_exclude_text.delete('1.0', 'end')
-        self.set_exclude_text.insert('1.0', '\n'.join(cfg.get('exclude_patterns', []) or []))
+        excl = cfg.get('exclude_patterns', []) or []
+        if excl:
+            self.set_exclude_text.insert('1.0', '\n'.join(excl))
+        else:
+            self.set_exclude_text.insert(
+                '1.0', '# One glob pattern per line (e.g. **\\\\node_modules\\\\**)\n')
         self.set_whitelist_text.delete('1.0', 'end')
-        self.set_whitelist_text.insert('1.0', '\n'.join(cfg.get('whitelist', []) or []))
+        white = cfg.get('whitelist', []) or []
+        if white:
+            self.set_whitelist_text.insert('1.0', '\n'.join(white))
+        else:
+            self.set_whitelist_text.insert(
+                '1.0', '# Paths Cleanroom must never scan or archive\n')
         self.set_prune_recent_days.set(int(cfg.get('prune_recent_days', 7)))
         prefs = load_ui_prefs()
         self.set_scan_on_startup.set(bool(prefs.get('scan_on_startup', False)))
@@ -3345,7 +3436,7 @@ class StartupManagerGUI(ctk.CTk):
             (8, has_entry), (9, has_cmd), (10, has_key),
             (12, True),
         ):
-            menu.entryconfig(idx, state='normal' if enabled else 'disabled')
+            self._menu_entry_state(menu, idx, enabled)
         try:
             menu.tk_popup(event.x_root, event.y_root)
         finally:
@@ -4998,7 +5089,7 @@ class StartupManagerGUI(ctk.CTk):
         for idx, enabled in ((0, bool(rp)), (1, has and bool(entry.get('dest'))),
                              (2, has), (3, has), (5, has and entry.get('present')),
                              (6, True), (8, True), (9, True)):
-            menu.entryconfig(idx, state='normal' if enabled else 'disabled')
+            self._menu_entry_state(menu, idx, enabled)
         try:
             menu.tk_popup(event.x_root, event.y_root)
         finally:
@@ -5175,7 +5266,7 @@ class StartupManagerGUI(ctk.CTk):
         self._ensure_rec_context_menu()
         has = self._selected_recommendation() is not None
         for idx, enabled in ((0, has), (1, has), (3, True), (4, True), (5, True)):
-            self._rec_context_menu.entryconfig(idx, state='normal' if enabled else 'disabled')
+            self._menu_entry_state(self._rec_context_menu, idx, enabled)
         try:
             self._rec_context_menu.tk_popup(event.x_root, event.y_root)
         finally:
@@ -5238,11 +5329,11 @@ class StartupManagerGUI(ctk.CTk):
         menu = self._archive_context_menu
         has_sel = bool(self._selected_archive_records())
         for idx, enabled in (
-            (0, has_sel), (1, has_sel), (3, has_sel), (4, has_sel),
-            (5, has_sel), (7, has_sel), (8, has_sel), (10, True),
-            (11, True), (12, True), (13, True), (14, True), (15, True), (17, True),
+            (0, has_sel), (1, has_sel), (3, has_sel), (4, has_sel), (5, has_sel),
+            (7, has_sel), (8, has_sel),
+            (10, True), (11, True), (12, True), (13, True), (14, True), (16, True),
         ):
-            menu.entryconfig(idx, state='normal' if enabled else 'disabled')
+            self._menu_entry_state(menu, idx, enabled)
         try:
             menu.tk_popup(event.x_root, event.y_root)
         finally:
@@ -5285,9 +5376,9 @@ class StartupManagerGUI(ctk.CTk):
         has_sel = self._selected_restore_index() is not None
         for idx, enabled in (
             (0, has_sel), (1, has_sel), (2, has_sel), (4, has_sel),
-            (6, has_sel), (7, has_sel), (9, True),
+            (6, has_sel), (7, has_sel), (10, True),
         ):
-            menu.entryconfig(idx, state='normal' if enabled else 'disabled')
+            self._menu_entry_state(menu, idx, enabled)
         try:
             menu.tk_popup(event.x_root, event.y_root)
         finally:
@@ -6770,6 +6861,31 @@ class ToolTip:
                 pass
 
 
+def _acquire_single_instance():
+    """Prevent duplicate GUI processes (and tray icon piles) on Windows."""
+    if sys.platform != 'win32':
+        return True
+    try:
+        import ctypes
+        ERROR_ALREADY_EXISTS = 183
+        mutex = ctypes.windll.kernel32.CreateMutexW(
+            None, True, 'Local\\CleanroomWindowsSingleInstance')
+        if ctypes.windll.kernel32.GetLastError() == ERROR_ALREADY_EXISTS:
+            try:
+                ctypes.windll.user32.MessageBoxW(
+                    0,
+                    'Cleanroom is already running.\nCheck the system tray or taskbar.',
+                    'Cleanroom',
+                    0x40,
+                )
+            except Exception:
+                pass
+            return False
+        return True
+    except Exception:
+        return True
+
+
 def _headless_main(argv):
     """Cleanroom.exe --headless-clean [--config X] [--dedupe]: run the cleaner
     without any UI so Task Scheduler doesn't need a Python install."""
@@ -6856,6 +6972,8 @@ if __name__ == '__main__':
         sys.exit(0 if ok else 1)
     if '--headless-clean' in sys.argv[1:]:
         sys.exit(_headless_main(sys.argv[1:]))
+    if not _acquire_single_instance():
+        sys.exit(0)
     # Rebuild the window when the user flips the theme.
     while True:
         app = StartupManagerGUI(initial_tab=_startup.open_tab)

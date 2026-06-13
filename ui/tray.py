@@ -62,6 +62,7 @@ class TrayController:
 
     def stop(self):
         icon = self._icon
+        self._icon = None
         if icon is None:
             return
         try:
