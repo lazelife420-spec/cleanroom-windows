@@ -79,6 +79,7 @@ class CommandBar:
         parent,
         *,
         bg: str,
+        card_bg: str,
         head_bg: str,
         accent: str,
         accent_dark: str,
@@ -91,30 +92,40 @@ class CommandBar:
         on_restore,
         more_items: list[tuple[str, callable]],
     ):
-        self.frame = ctk_theme.frame(parent, bg)
-        self.frame.pack(fill='x', anchor='w', pady=(6, 0))
-        inner = self.frame
-        self._primary = ctk_theme.frame(inner, bg)
+        self._bg = bg
+        self._card_bg = card_bg
+        self._head_bg = head_bg
+        self._accent = accent
+        self._accent_dark = accent_dark
+        self._accent_soft = accent_soft
+        self._on_accent = on_accent
+        self._shell = ctk_theme.frame(parent, card_bg, corner_radius=10)
+        self._shell.pack(fill='x', pady=(4, 0))
+        inner = ctk_theme.frame(self._shell, card_bg)
+        inner.pack(fill='x', padx=10, pady=8)
+        self.frame = inner
+        self._primary = ctk_theme.frame(inner, card_bg)
         self._primary.pack(side='left')
 
         self.tb_scan = ctk_theme.button(
             self._primary, 'Scan', on_scan,
-            fg_color=head_bg, hover_color=accent_soft, text_color=text,
+            fg_color=head_bg, hover_color=accent_soft, text_color=text, height=34,
         )
         self.tb_scan.pack(side='left', padx=(0, 6))
         self.tb_preview = ctk_theme.button(
             self._primary, 'Preview Receipt', on_preview,
-            fg_color=head_bg, hover_color=accent_soft, text_color=text,
+            fg_color=head_bg, hover_color=accent_soft, text_color=text, height=34,
         )
         self.tb_preview.pack(side='left', padx=(0, 6))
         self.tb_apply = ctk_theme.button(
             self._primary, 'Archive & Clean', on_apply,
             fg_color=accent, hover_color=accent_dark, text_color=on_accent, primary=True,
+            height=34,
         )
         self.tb_apply.pack(side='left', padx=(0, 6))
         self.tb_restore = ctk_theme.button(
             self._primary, 'Restore', on_restore,
-            fg_color=head_bg, hover_color=accent_soft, text_color=text,
+            fg_color=head_bg, hover_color=accent_soft, text_color=text, height=34,
         )
         self.tb_restore.pack(side='left', padx=(0, 6))
 
@@ -124,20 +135,16 @@ class CommandBar:
             self._more_menu.add_command(label=label, command=cmd)
         self._more_btn = ctk_theme.button(
             inner, 'More ▾', self._show_more,
-            fg_color=head_bg, hover_color=accent_soft, text_color=text, width=72,
+            fg_color=head_bg, hover_color=accent_soft, text_color=text, width=72, height=34,
         )
         self._more_btn.pack(side='left', padx=(0, 8))
-
-        self._head_bg = head_bg
-        self._accent = accent
-        self._accent_dark = accent_dark
-        self._accent_soft = accent_soft
 
         flow = ctk_theme.label(
             inner, ctk_theme.PROOF_FLOW_TEXT, text_color=text, font_size=9,
         )
         self._proof_flow_lbl = flow
         flow.pack(side='right', padx=(8, 0))
+        self._dashboard_mode = False
 
     def _show_more(self):
         try:
@@ -151,20 +158,31 @@ class CommandBar:
                 pass
 
     def set_context(self, tab_idx: int) -> None:
-        """Emphasize primary actions for the active page (buttons stay visible for layout gates)."""
-        primary = {0, 3}
-        restore_emphasis = {5, 6}
-        for btn, fg, hover in (
-            (self.tb_scan, self._head_bg, self._accent_soft),
-            (self.tb_preview, self._head_bg, self._accent_soft),
-            (self.tb_apply, self._accent, self._accent_dark),
-            (self.tb_restore, self._head_bg, self._accent_soft),
-        ):
-            btn.configure(fg_color=fg, hover_color=hover)
-        if tab_idx in primary:
+        """Emphasize primary actions for the active page."""
+        if self._dashboard_mode:
+            return
+        for btn in (self.tb_scan, self.tb_preview, self.tb_restore):
+            btn.configure(fg_color=self._head_bg, hover_color=self._accent_soft)
+        self.tb_apply.configure(fg_color=self._head_bg, hover_color=self._accent_soft)
+        if tab_idx in (0, 3):
             self.tb_apply.configure(fg_color=self._accent, hover_color=self._accent_dark)
-        elif tab_idx in restore_emphasis:
+        elif tab_idx in (5, 6):
             self.tb_restore.configure(fg_color=self._accent, hover_color=self._accent_dark)
+
+    def set_page_mode(self, *, dashboard: bool, tab_idx: int = 0) -> None:
+        """Home: compact secondary strip. Workspace: integrated workflow bar."""
+        self._dashboard_mode = dashboard
+        if dashboard:
+            self._shell.configure(fg_color=self._bg)
+            for btn in (self.tb_scan, self.tb_preview, self.tb_apply, self.tb_restore, self._more_btn):
+                btn.configure(fg_color=self._head_bg, hover_color=self._accent_soft, height=30)
+            self._proof_flow_lbl.pack_forget()
+        else:
+            self._shell.configure(fg_color=self._card_bg)
+            for btn in (self.tb_scan, self.tb_preview, self.tb_apply, self.tb_restore, self._more_btn):
+                btn.configure(height=34)
+            self._proof_flow_lbl.pack(side='right', padx=(8, 0))
+            self.set_context(tab_idx)
 
     def set_compact_labels(self, compact: bool) -> None:
         self.tb_preview.configure(text='Preview' if compact else 'Preview Receipt')
@@ -256,12 +274,12 @@ class ProofDrawer(tk.Frame):
 def settings_card(parent, title: str, *, card_bg: str, accent: str) -> ctk.CTkFrame:
     """Settings section card with heading."""
     box = ctk_theme.frame(parent, card_bg, corner_radius=12)
-    box.pack(fill='x', padx=12, pady=(0, 12))
+    box.pack(fill='x', padx=12, pady=(0, 14))
     ctk_theme.label(
-        box, title, text_color=accent, font_size=14, weight='bold',
-    ).pack(anchor='w', padx=16, pady=(14, 6))
+        box, title, text_color=accent, font_size=15, weight='bold',
+    ).pack(anchor='w', padx=18, pady=(16, 8))
     body = ctk_theme.frame(box, card_bg, corner_radius=12)
-    body.pack(fill='x', padx=16, pady=(0, 14))
+    body.pack(fill='x', padx=18, pady=(0, 16))
     return body
 
 
@@ -419,14 +437,14 @@ def collapsible_section(
     """Collapsible sidebar group; returns (toggle_button, body_frame)."""
     accent_soft = accent_soft or sidebar_bg
     block = ctk_theme.frame(parent, sidebar_bg)
-    block.pack(fill='x', padx=2, pady=(0, 6))
+    block.pack(fill='x', padx=4, pady=(0, 10))
     state = {'open': start_open}
 
     header = ctk_theme.frame(block, accent_soft if start_open else sidebar_bg, corner_radius=8)
-    header.pack(fill='x', padx=2, pady=(0, 2))
+    header.pack(fill='x', padx=2, pady=(0, 4))
     body = ctk_theme.frame(block, sidebar_bg)
     if start_open:
-        body.pack(fill='x', padx=4, pady=(2, 0))
+        body.pack(fill='x', padx=6, pady=(0, 4))
 
     chevron = '▾' if start_open else '▸'
     toggle = ctk_theme.button(
@@ -435,17 +453,17 @@ def collapsible_section(
         lambda: None,
         fg_color='transparent',
         hover_color=accent_soft,
-        text_color=text_color,
+        text_color=muted,
         anchor='w',
-        height=30,
+        height=32,
         font=ctk_theme.font(10, 'bold'),
     )
-    toggle.pack(fill='x', padx=8, pady=4)
+    toggle.pack(fill='x', padx=10, pady=5)
 
     def _flip():
         state['open'] = not state['open']
         if state['open']:
-            body.pack(fill='x', padx=4, pady=(2, 0))
+            body.pack(fill='x', padx=6, pady=(0, 4))
             header.configure(fg_color=accent_soft)
             toggle.configure(text=f'▾  {title}')
         else:
@@ -470,5 +488,5 @@ def sidebar_nav_button(
     return ctk_theme.button(
         parent, label, command,
         fg_color='transparent', hover_color=accent_soft, text_color=text_color,
-        anchor='w', height=32, corner_radius=8,
+        anchor='w', height=36, corner_radius=8,
     )
