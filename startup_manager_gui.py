@@ -1234,30 +1234,19 @@ class StartupManagerGUI(ctk.CTk):
         sidebar.pack(side='left', fill='y', padx=(0, 12), pady=(0, 6))
         sidebar.configure(width=210)
         sidebar.pack_propagate(False)
-        sidebar.grid_rowconfigure(2, weight=1)
+        sidebar.grid_rowconfigure(1, weight=1)
         sidebar.grid_columnconfigure(0, weight=1)
 
         ctk_theme.label(sidebar, brand.APP_DISPLAY, text_color=TEXT,
                         font_size=13, weight='bold').grid(
             row=0, column=0, sticky='ew', padx=12, pady=(14, 8))
 
-        self._sidebar_explorer_btn = sidebar_nav_button(
-            sidebar, 'Explorer Context Menus…', self.open_shell_context_menu_tool,
-            **dict(sidebar_bg=SIDEBAR_BG, accent_soft=ACCENT_SOFT, text_color=ACCENT),
-        )
-        self._sidebar_explorer_btn.configure(fg_color=ACCENT_SOFT)
-        self._sidebar_explorer_btn.grid(row=1, column=0, sticky='ew', padx=8, pady=(0, 6))
-        self._add_tooltip(
-            self._sidebar_explorer_btn,
-            'Build and install Windows Explorer right-click menus (HKCU, per-user).\n'
-            'Add presets or custom menus, then Install to Explorer.',
-        )
-
         nav_scroll = ctk.CTkScrollableFrame(
             sidebar, fg_color=SIDEBAR_BG, corner_radius=0, width=194,
             scrollbar_button_color=BORDER, scrollbar_button_hover_color=ACCENT_SOFT,
         )
-        nav_scroll.grid(row=2, column=0, sticky='nsew', padx=4, pady=(0, 4))
+        nav_scroll.grid(row=1, column=0, sticky='nsew', padx=4, pady=(0, 4))
+        sidebar.grid_rowconfigure(1, weight=1)
         self._sidebar_nav_scroll = nav_scroll
         self._nav_buttons = []
         nav_kw = dict(sidebar_bg=SIDEBAR_BG, accent_soft=ACCENT_SOFT, text_color=TEXT)
@@ -1267,9 +1256,9 @@ class StartupManagerGUI(ctk.CTk):
         )
         for idx, label, tip in (
             (0, 'Home', 'Proof home — custody status and next archive-first action.'),
-            (1, 'Activity', 'Activity ledger — every archive with timestamps.'),
             (3, 'Cleaner', 'Scan folders and archive reviewed files to custody.'),
             (6, 'Archive', 'Archive custody — browse, delete, reclaim disk space.'),
+            (1, 'Activity', 'Activity ledger — every archive with timestamps.'),
         ):
             btn = sidebar_nav_button(
                 main_body, label, lambda i=idx: self._navigate_to_tab(i), **nav_kw)
@@ -1292,32 +1281,52 @@ class StartupManagerGUI(ctk.CTk):
             self._nav_buttons.append((idx, btn))
             self._add_tooltip(btn, tip)
 
-        _, tools_body = collapsible_section(
+        tools_toggle, tools_body = collapsible_section(
             nav_scroll, 'Tools', muted=MUTED, start_open=False, **nav_kw,
         )
+        self._sidebar_tools_toggle = tools_toggle
+        self._sidebar_tools_body = tools_body
         tools = [
+            ('Explorer Context Menus…', self.open_shell_context_menu_tool,
+             'Build and install Windows Explorer right-click menus (HKCU, per-user).\n'
+             'Add presets or custom menus, then Install to Explorer.'),
             ('Registry Snapshot', self.open_registry_health,
              'Find registry entries pointing at missing files.'),
             ('Cleanroom Rewind', self.open_time_machine,
              'Roll back whole days of Cleanroom actions.'),
             ('Cleanroom Receipt', self.open_last_receipt,
              'View the receipt from your most recent cleanup.'),
-            ('Custody Check', self.verify_custody,
-             'Audit history — prove archived items are still on disk.'),
             ('Proof Pack (HTML)', self.export_audit,
              'Generate a shareable HTML proof report.'),
+            ('Custody Check', self.verify_custody,
+             'Audit history — prove archived items are still on disk.'),
             ('Schedule Cleanup', self.schedule_optimization,
              'Schedule recurring cleanup via Task Scheduler.'),
         ]
-        for label, cmd, tip in tools:
+        for i, (label, cmd, tip) in enumerate(tools):
             btn = sidebar_nav_button(tools_body, label, cmd, **nav_kw)
             btn.pack(fill='x', pady=1, padx=2)
+            if i == 0:
+                self._sidebar_explorer_btn = btn
             self._add_tooltip(btn, tip)
 
         footer = ctk_theme.frame(sidebar, SIDEBAR_BG)
-        footer.grid(row=3, column=0, sticky='ew', padx=10, pady=(4, 10))
+        footer.grid(row=2, column=0, sticky='ew', padx=10, pady=(4, 10))
         ctk_theme.label(footer, 'F5 refresh · Ctrl+F search · Ctrl+1–8 tabs',
                         text_color=MUTED, font_size=9).pack(anchor='w')
+
+    def _expand_sidebar_tools(self):
+        """Expand Tools group so advanced utilities are reachable (layout gates, deep links)."""
+        btn = getattr(self, '_sidebar_tools_toggle', None)
+        body = getattr(self, '_sidebar_tools_body', None)
+        if btn is None or body is None:
+            return
+        try:
+            if not body.winfo_ismapped():
+                btn.invoke()
+                self.update_idletasks()
+        except Exception:
+            pass
 
     def _sync_nav_buttons(self, event=None):
         try:
@@ -1347,12 +1356,17 @@ class StartupManagerGUI(ctk.CTk):
         hero_inner.pack(fill='x', padx=14, pady=12)
         ttk.Label(hero_inner, text='Home', font=('Segoe UI', 14, 'bold'),
                   background=CARD_BG).pack(anchor='w')
+        ttk.Label(
+            hero_inner,
+            text='Your proof dashboard — custody status, next safe action, and recent receipts.',
+            style='SubHeader.TLabel', wraplength=760,
+        ).pack(anchor='w', pady=(2, 0))
         self.dashboard_msg_lbl = ttk.Label(
             hero_inner,
             text='Ready. Click Scan to review cleanup candidates.',
-            style='SubHeader.TLabel', wraplength=760,
+            style='Info.TLabel', wraplength=760,
         )
-        self.dashboard_msg_lbl.pack(anchor='w', pady=(4, 8))
+        self.dashboard_msg_lbl.pack(anchor='w', pady=(6, 8))
         cta_row = ttk.Frame(hero_inner, style='Card.TFrame')
         cta_row.pack(anchor='w')
         self.dashboard_primary_btn = ttk.Button(
@@ -2487,6 +2501,7 @@ class StartupManagerGUI(ctk.CTk):
             sidebar_bg=BG, accent=ACCENT_SOFT, muted=MUTED,
             on_select=_select_settings_section,
         )
+        self._select_settings_section = _select_settings_section
         _select_settings_section('General')
 
         general = self._settings_section_frames['General']
@@ -2581,11 +2596,22 @@ class StartupManagerGUI(ctk.CTk):
             self._settings_section_frames['Explorer'], 'Explorer integration', card_bg=CARD_BG, accent=ACCENT)
         ctk_theme.label(
             shell_body,
-            'Build Windows Explorer right-click menus (per-user HKCU). Choose presets, '
-            'add custom menus, then Install to Explorer or Remove from Explorer. '
-            'Use Context Menu Editor in the pinned footer below.',
+            'Advanced utility — install Cleanroom actions in File Explorer (per-user HKCU). '
+            'Choose presets, add custom menus, then Install or Remove from Explorer.',
             text_color=MUTED, font_size=10, wraplength=720, justify='left',
-        ).pack(anchor='w')
+        ).pack(anchor='w', pady=(0, 8))
+        shell_row = ttk.Frame(shell_body, style='Card.TFrame')
+        shell_row.pack(anchor='w')
+        self._settings_shell_btn = ttk.Button(
+            shell_row, text='Open Context Menu Editor…', style='Action.TButton',
+            command=self.open_shell_context_menu_tool,
+        )
+        self._settings_shell_btn.pack(side='left')
+        ctk_theme.label(
+            shell_row,
+            'Also available under sidebar → Tools.',
+            text_color=MUTED, font_size=9,
+        ).pack(side='left', padx=(10, 0), pady=(4, 0))
 
         self._settings_downloads_path = str(
             Path(os.environ.get('USERPROFILE', Path.home())) / 'Downloads')
@@ -2744,13 +2770,8 @@ class StartupManagerGUI(ctk.CTk):
         self.save_settings_btn = ttk.Button(footer, text='Save Settings', style='Primary.TButton',
                                             command=self.save_settings)
         self.save_settings_btn.pack(side='left')
-        self._settings_shell_btn = ttk.Button(
-            footer, text='Context Menu Editor…', style='Action.TButton',
-            command=self.open_shell_context_menu_tool,
-        )
-        self._settings_shell_btn.pack(side='left', padx=(8, 0))
         ttk.Button(footer, text='Discard Changes', style='Action.TButton',
-                   command=self.load_settings_form).pack(side='left', padx=6)
+                   command=self.load_settings_form).pack(side='left', padx=(8, 0))
         self.settings_status_lbl = ttk.Label(footer, text='', style='Info.TLabel')
         self.settings_status_lbl.pack(side='left', padx=12)
         self._add_tooltip(self.save_settings_btn, 'Write these values to the active cleanup config.')

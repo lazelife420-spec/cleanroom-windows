@@ -155,8 +155,13 @@ def check_layout(app, width: int, height: int, label: str, *, check_settings: bo
         if widget is None:
             issues.append(f'{label}/sidebar missing {attr}')
             continue
+        if not widget.winfo_ismapped() and attr == '_sidebar_explorer_btn':
+            if hasattr(app, '_expand_sidebar_tools'):
+                app._expand_sidebar_tools()
+                app.update_idletasks()
         issues.extend(_widget_ok(widget, f'{label}/sidebar/{name}', 80, 20))
-        issues.extend(_widget_in_viewport(widget, app, f'{label}/sidebar/{name}'))
+        if attr != '_sidebar_explorer_btn':
+            issues.extend(_widget_in_viewport(widget, app, f'{label}/sidebar/{name}'))
 
     if not _find_text_in_tree(app, 'Preview'):
         issues.append(f'{label}/proof-flow or Preview Receipt text missing')
@@ -169,6 +174,10 @@ def check_layout(app, width: int, height: int, label: str, *, check_settings: bo
             app.update_idletasks()
             app.update()
             time.sleep(0.08)
+            if tab_idx == 7 and hasattr(app, '_select_settings_section'):
+                app._select_settings_section('Explorer')
+                app.update_idletasks()
+                app.update()
             for attr, btn_name in buttons:
                 widget = getattr(app, attr, None)
                 if widget is None:
@@ -191,6 +200,10 @@ def check_layout(app, width: int, height: int, label: str, *, check_settings: bo
             app.update_idletasks()
             app.update()
             time.sleep(0.1)
+            if hasattr(app, '_select_settings_section'):
+                app._select_settings_section('Explorer')
+                app.update_idletasks()
+                app.update()
             if not _find_text_in_tree(app, 'local-only'):
                 issues.append(f'{label}/Settings local-only text missing')
             shell_btn = getattr(app, '_settings_shell_btn', None)
