@@ -4,8 +4,10 @@ from __future__ import annotations
 import re
 from typing import Callable
 
-DEFAULT_SIZE = (1280, 760)
-MIN_SIZE = (1040, 640)
+DEFAULT_SIZE = (1050, 700)
+MIN_SIZE = (920, 560)
+MAX_SIZE = (1080, 780)
+MAX_HEIGHT_RATIO = 0.72  # prevent tall skinny windows (h/w)
 MARGIN = 28
 TASKBAR_RESERVE = 52
 
@@ -49,14 +51,20 @@ def compute_geometry(widget, prefs: dict | None = None):
         h = int(saved['h'])
         x = int(saved.get('x', (sw - w) // 2))
         y = int(saved.get('y', (avail_h - h) // 2))
-        w = max(min_w, min(w, sw - margin))
-        h = max(min_h, min(h, avail_h - margin))
+        w = max(min_w, min(w, sw - margin, MAX_SIZE[0]))
+        h = max(min_h, min(h, avail_h - margin, MAX_SIZE[1]))
+        max_h = max(min_h, int(w * MAX_HEIGHT_RATIO))
+        if h > max_h:
+            h = max_h
+        min_w_from_h = max(min_w, int(h / MAX_HEIGHT_RATIO))
+        if w > min_w_from_h * 1.85:
+            w = int(min_w_from_h * 1.85)
         x = max(0, min(x, sw - w))
         y = max(0, min(y, avail_h - h))
         return w, h, x, y, bool(saved.get('maximized'))
 
-    w = max(min_w, min(pref_w, sw - margin))
-    h = max(min_h, min(pref_h, avail_h - margin))
+    w = max(min_w, min(pref_w, sw - margin, MAX_SIZE[0]))
+    h = max(min_h, min(pref_h, avail_h - margin, MAX_SIZE[1]))
     x = max(0, (sw - w) // 2)
     y = max(0, (avail_h - h) // 2)
     return w, h, x, y, False
@@ -67,7 +75,10 @@ def apply_window_geometry(widget, prefs: dict | None = None) -> None:
     widget.minsize(*MIN_SIZE)
     try:
         sw, avail_h, margin, _ = _screen_box(widget)
-        widget.maxsize(sw, avail_h)
+        if maximized:
+            widget.maxsize(sw, avail_h)
+        else:
+            widget.maxsize(MAX_SIZE[0], min(MAX_SIZE[1], avail_h))
     except Exception:
         pass
     widget.geometry(f'{w}x{h}+{x}+{y}')
@@ -120,3 +131,28 @@ def bind_window_tracking(widget, *, on_save: Callable[[dict], None]) -> None:
         state['job'] = widget.after(450, _emit_save)
 
     widget.bind('<Configure>', _schedule_save, add='+')
+
+
+def apply_dialog_geometry(dlg, parent, pref_w: int, pref_h: int) -> None:
+    """Size and center a dialog over *parent*, clamped to the visible screen."""
+    dlg.update_idletasks()
+    try:
+        parent.update_idletasks()
+    except Exception:
+        pass
+    scale = dpi_scale(parent)
+    sw, avail_h, margin, _ = _screen_box(parent)
+    w = max(360, min(int(pref_w * scale), sw - margin, MAX_SIZE[0]))
+    h = max(280, min(int(pref_h * scale), avail_h - margin, MAX_SIZE[1]))
+    try:
+        px, py = parent.winfo_rootx(), parent.winfo_rooty()
+        pw, ph = parent.winfo_width(), parent.winfo_height()
+        x = px + max(0, (pw - w) // 2)
+        y = py + max(0, (ph - h) // 2)
+    except Exception:
+        x = max(0, (sw - w) // 2)
+        y = max(0, (avail_h - h) // 2)
+    x = max(0, min(x, sw - w))
+    y = max(0, min(y, avail_h - h))
+    dlg.minsize(min(360, w), min(280, h))
+    dlg.geometry(f'{w}x{h}+{x}+{y}')

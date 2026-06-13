@@ -8,12 +8,13 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 from datetime import datetime, timedelta
 from pathlib import Path
 
 import brand
 
-PRUNE_SAFE = 'Safe to prune'
+PRUNE_SAFE = 'Safe to delete'
 PRUNE_REVIEW = 'Review first'
 PRUNE_KEEP = 'Keep in custody'
 
@@ -261,6 +262,72 @@ def filter_by_prune_rank(records, rank=None):
     return [r for r in records if r.get('prune_rank') == rank]
 
 
+def filter_by_search(records, query):
+    q = (query or '').strip().lower()
+    if not q:
+        return list(records)
+    out = []
+    for r in records:
+        hay = ' '.join(str(r.get(k, '')) for k in ('src', 'dest', 'reason', 'prune_rank'))
+        if q in hay.lower():
+            out.append(r)
+    return out
+
+
+def filter_older_than_days(records, days, now=None):
+    """Records whose archive timestamp is at least `days` old and still on disk."""
+    now = now or datetime.now()
+    cutoff = now - timedelta(days=max(0, int(days)))
+    out = []
+    for r in records:
+        ts = _parse_ts(r.get('when'))
+        if ts is not None and ts > cutoff:
+            continue
+        dest = r.get('dest') or ''
+        if dest and Path(dest).exists():
+            out.append(r)
+    return out
+
+
+def summarize_archive_records(records):
+    safe = [r for r in records if r.get('prune_rank') == PRUNE_SAFE]
+    bytes_total = 0
+    for r in records:
+        try:
+            bytes_total += int(r.get('size') or 0)
+        except (TypeError, ValueError):
+            pass
+    safe_bytes = sum(int(r.get('size') or 0) for r in safe)
+    return {
+        'total': len(records),
+        'present': sum(1 for r in records if r.get('restorable')),
+        'bytes_total': bytes_total,
+        'safe_count': len(safe),
+        'safe_bytes': safe_bytes,
+    }
+
+
+def _bytes_on_disk(dest_path):
+    try:
+        if dest_path.is_file():
+            return dest_path.stat().st_size
+        if dest_path.is_dir():
+            return sum(f.stat().st_size for f in dest_path.rglob('*') if f.is_file())
+    except OSError:
+        pass
+    return 0
+
+
+def _remove_archive_path(dest_path):
+    if dest_path.is_file():
+        dest_path.unlink()
+        return True
+    if dest_path.is_dir():
+        shutil.rmtree(dest_path)
+        return True
+    return False
+
+
 def append_log_entries(log_path, new_entries):
     path = Path(log_path)
     actions = []
@@ -294,16 +361,20 @@ def apply_prune(records, log_path, receipt_dir=None, dry_run=False, now=None):
             skipped.append({'dest': dest, 'reason': 'missing dest evidence'})
             continue
         dest_path = Path(dest)
-        if not dest_path.is_file():
+        if not dest_path.exists():
             skipped.append({'dest': dest, 'reason': 'not in archive'})
             continue
-        if src and Path(src).exists() and dest_path.resolve() == Path(src).resolve():
-            skipped.append({'dest': dest, 'reason': 'refuses live path'})
-            continue
+        if src and Path(src).exists():
+            try:
+                if dest_path.resolve() == Path(src).resolve():
+                    skipped.append({'dest': dest, 'reason': 'refuses live path'})
+                    continue
+            except OSError:
+                pass
         try:
-            size = dest_path.stat().st_size
-        except OSError:
-            size = int(rec.get('size') or 0)
+            size = _bytes_on_disk(dest_path) or int(rec.get('size') or 0)
+        except (TypeError, ValueError):
+            size = _bytes_on_disk(dest_path)
         if dry_run:
             pruned_entries.append({
                 'src': src, 'dest': dest, 'size': size,
@@ -312,7 +383,9 @@ def apply_prune(records, log_path, receipt_dir=None, dry_run=False, now=None):
             bytes_pruned += size
             continue
         try:
-            dest_path.unlink()
+            if not _remove_archive_path(dest_path):
+                skipped.append({'dest': dest, 'reason': 'not in archive'})
+                continue
         except OSError as e:
             skipped.append({'dest': dest, 'reason': str(e)})
             continue

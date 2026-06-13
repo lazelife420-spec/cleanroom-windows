@@ -47,6 +47,11 @@ TAB_CONTEXT = (
         'next': 'Select archived entries and click Restore Selected.',
     },
     {
+        'title': 'Archive',
+        'description': 'Browse everything Cleanroom holds in custody — restore, open folders, or permanently delete archived copies.',
+        'next': 'Filter by Safe to delete, select rows, then Delete from Archive. Original live files are never touched.',
+    },
+    {
         'title': 'Settings',
         'description': 'Scan paths, archive folder, age rules, and quick toggles — all stored locally.',
         'next': 'Adjust Quick settings, Save Settings, then re-scan on Cleaner.',
