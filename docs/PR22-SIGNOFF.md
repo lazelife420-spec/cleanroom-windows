@@ -3,6 +3,9 @@
 **Branch:** `ui/proof-dashboard-polish`  
 **Status:** ON HOLD — do not merge until every item below is checked in a real Windows session.
 
+> **Critical:** Manual sign-off must run on branch `ui/proof-dashboard-polish` with `python startup_manager_gui.py`.  
+> Testing `main` or an old packaged `.exe` will show stale UI (Settings in sidebar, Telemetry button, stacked chrome) and is **not valid** for PR #22.
+
 Automated gates (`pytest`, `ui_merge_gates`, `verify_release_surface`, tray smoke) must be green first. This document covers what automation cannot fully prove.
 
 **Do not commit screenshots to the repo.** Capture locally for review; use this doc as the PASS/FAIL rubric.

@@ -604,6 +604,12 @@ class ProofSummaryCard(tk.Frame):
         if self._on_view:
             self._on_view()
 
+    def set_action_handlers(self, *, open_cb=None, copy_cb=None, view_cb=None):
+        """Override quick-action buttons; omit args to restore constructor callbacks."""
+        self._btn_open.config(command=open_cb or self._open_receipt)
+        self._btn_copy.config(command=copy_cb or self._copy_proof)
+        self._btn_view.config(command=view_cb or self._view_details)
+
     def show_idle(self, message: str = 'Choose a recommendation to see guidance and next steps.'):
         self._title_lbl.config(text='Select a recommendation')
         self._badge_lbl.config(text='GUIDANCE', fg=self._muted)
@@ -623,6 +629,26 @@ class ProofSummaryCard(tk.Frame):
         self._summary_lbl.config(text=detail)
         for btn in (self._btn_open, self._btn_copy, self._btn_view):
             btn.config(state='normal')
+
+    def show_scan_results(self, count: int, size_text: str, checked: int):
+        self._title_lbl.config(text=f'{count:,} cleanup candidate{"s" if count != 1 else ""}')
+        self._badge_lbl.config(text='SCAN RESULTS', fg=self._proof)
+        self._summary_lbl.config(
+            text=(f'{size_text} reclaimable · {checked:,} checked for archive.\n'
+                  'Open Cleaner to review paths and preview the receipt before archiving.'))
+        self._btn_open.config(state='normal')
+        self._btn_copy.config(state='normal')
+        self._btn_view.config(state='normal')
+
+    def show_latest_receipt(self, receipt_label: str):
+        self._title_lbl.config(text='Latest receipt on disk')
+        self._badge_lbl.config(text='PROOF', fg=self._proof)
+        self._summary_lbl.config(
+            text=f'Most recent Cleanroom receipt: {receipt_label}.\n'
+                 'Open it to review measured free-space proof and custody details.')
+        self._btn_open.config(state='normal')
+        self._btn_copy.config(state='disabled')
+        self._btn_view.config(state='disabled')
 
 
 def settings_pill_nav(

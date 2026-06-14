@@ -111,7 +111,7 @@ class ReceiptPrinterPanel(tk.Frame):
         self._stamp_lbl.pack(fill='x', pady=(8, 0))
 
         self._idle_lbl = tk.Label(
-            self._slot, text='Awaiting proof…', bg=panel_bg, fg=muted,
+            self._slot, text='Ready for proof output…', bg=panel_bg, fg=muted,
             font=('Segoe UI', 8),
         )
         self._idle_lbl.place(relx=0.5, rely=0.55, anchor='center')

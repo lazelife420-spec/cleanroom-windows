@@ -877,8 +877,8 @@ class StartupManagerGUI(ctk.CTk):
                 self.ctx_subtitle_lbl.pack(side='left', padx=(8, 0))
         if hasattr(self, '_hdr_settings_btn'):
             self._hdr_settings_btn.configure(
-                text='⚙' if w < 980 else 'Settings',
-                width=40 if w < 980 else 88,
+                text='⚙' if w < 900 else '⚙ Settings',
+                width=40 if w < 900 else 100,
             )
         if hasattr(self, '_proof_flow_lbl'):
             self._proof_flow_lbl.pack_forget()
@@ -902,13 +902,48 @@ class StartupManagerGUI(ctk.CTk):
         for attr in (
             '_act_detail_src', '_act_detail_dest', '_act_detail_hint',
             '_act_detail_type', '_act_detail_when', '_act_detail_custody',
-            'detail_name', 'detail_location', 'detail_hint',
+            'detail_name', 'detail_location', 'detail_hint', 'detail_status',
             '_archive_detail_src', '_archive_detail_dest',
             '_archive_detail_meta', '_archive_detail_rank',
             'restore_detail_src', 'restore_detail_dest',
         ):
             if hasattr(self, attr):
                 getattr(self, attr).configure(wraplength=detail_wrap)
+        if hasattr(self, 'detail_command_text'):
+            cmd_h = 3 if h < 640 else 4 if h < 760 else 5
+            try:
+                self.detail_command_text.configure(height=cmd_h)
+            except Exception:
+                pass
+        if hasattr(self, '_startup_stats_row'):
+            if mode == 'compact' or w < 980:
+                try:
+                    self._startup_stats_row.pack_forget()
+                except Exception:
+                    pass
+            elif not self._startup_stats_row.winfo_ismapped():
+                try:
+                    self._startup_stats_row.pack(fill='x', padx=10, pady=(0, 8))
+                except Exception:
+                    pass
+        if hasattr(self, 'search_entry'):
+            sw = 14 if w < 920 else 20 if w < 1100 else 28
+            try:
+                self.search_entry.configure(width=sw)
+            except Exception:
+                pass
+        if hasattr(self, 'disable_btn') and hasattr(self, '_startup_actions'):
+            try:
+                if w < 920:
+                    self.disable_btn.pack(side='top', anchor='w', padx=0, pady=(4, 0))
+                else:
+                    self.disable_btn.pack(side='left', padx=(6, 0))
+            except Exception:
+                pass
+        if hasattr(self, '_proof_summary') and hasattr(self._proof_summary, '_title_lbl'):
+            pw = max(180, min(320, detail_w))
+            self._proof_summary._title_lbl.configure(wraplength=pw)
+            self._proof_summary._summary_lbl.configure(wraplength=pw)
         if hasattr(self, '_archive_subheader'):
             self._archive_subheader.configure(wraplength=max(320, w - 180))
         if hasattr(self, '_uninst_quiet_cb'):
@@ -1120,7 +1155,8 @@ class StartupManagerGUI(ctk.CTk):
             with PILImage.open(path) as img:
                 img = img.convert('RGBA')
                 img.thumbnail((px, px), PILImage.LANCZOS)
-                return ctk.CTkImage(light_image=img, dark_image=img, size=(px, px))
+                w, h = img.size
+                return ctk.CTkImage(light_image=img, dark_image=img, size=(w, h))
         except Exception:
             return None
 
@@ -1900,7 +1936,7 @@ class StartupManagerGUI(ctk.CTk):
         self.prune_btn = self.dashboard_secondary_btn
         self.receipt_btn = self.dashboard_primary_btn
         self.reg_health_btn = self.dashboard_secondary_btn
-        self.telemetry_btn = self.dashboard_secondary_btn
+        self.diagnostics_btn = self.dashboard_secondary_btn
 
     def _build_activity_tab(self):
         """Proof ledger — every action Cleanroom ever took, with custody status."""
@@ -2013,6 +2049,8 @@ class StartupManagerGUI(ctk.CTk):
                     self._act_detail_src, self._act_detail_dest, self._act_detail_hint):
             lbl.pack(anchor='w', pady=(0, 6))
 
+        ttk.Label(act_detail, text='Quick actions', font=('Segoe UI', 10, 'bold'),
+                  background=CARD_BG).pack(anchor='w', pady=(4, 6))
         act_btns = ttk.Frame(act_detail, style='Card.TFrame')
         act_btns.pack(fill='x', pady=(8, 0))
         act_btns.columnconfigure(0, weight=1)
@@ -2040,6 +2078,7 @@ class StartupManagerGUI(ctk.CTk):
             on_select=self._on_activity_select,
             on_double=self._on_activity_double_click,
             on_right=self._on_activity_right_click,
+            on_enter=self._on_activity_double_click,
         )
         self._activity_context_menu = None
 
@@ -2569,6 +2608,7 @@ class StartupManagerGUI(ctk.CTk):
 
         stats_row = ttk.Frame(self.startup_tab, style='Content.TFrame')
         stats_row.pack(fill='x', padx=10, pady=(0, 8))
+        self._startup_stats_row = stats_row
         for col in range(5):
             stats_row.grid_columnconfigure(col, weight=1)
         self.total_label = self._stat_card_compact(stats_row, 0, 'Total')
@@ -2579,6 +2619,7 @@ class StartupManagerGUI(ctk.CTk):
 
         chips = ttk.Frame(self.startup_tab, style='Content.TFrame')
         chips.pack(fill='x', padx=10, pady=(0, 6))
+        self._startup_chips = chips
         self.cat_all = ttk.Button(chips, text='All', style='Sidebar.TButton',
                                   command=lambda: self._set_category('All'))
         self.cat_folders = ttk.Button(chips, text='Folders', style='Sidebar.TButton',
@@ -2613,6 +2654,7 @@ class StartupManagerGUI(ctk.CTk):
 
         startup_actions = ttk.Frame(self.startup_tab, style='Content.TFrame')
         startup_actions.pack(fill='x', padx=10, pady=(0, 6))
+        self._startup_actions = startup_actions
         self.refresh_btn = ttk.Button(startup_actions, text='Refresh', style='Primary.TButton',
                                       command=self.refresh)
         self.refresh_btn.pack(side='left')
@@ -2627,7 +2669,7 @@ class StartupManagerGUI(ctk.CTk):
         self._startup_container.pack(fill='both', expand=True, padx=10, pady=(0, 4))
 
         self._startup_pane, startup_left, startup_right = create_horizontal_pane(
-            self._startup_container, use_pack=True)
+            self._startup_container, use_pack=True, min_left=300, min_right=260)
         self._bind_pane(self._startup_pane, 'startup_split', default=480)
 
         self._startup_tree_card = ttk.Frame(startup_left, style='Card.TFrame')
@@ -6000,13 +6042,15 @@ class StartupManagerGUI(ctk.CTk):
         except tk.TclError:
             messagebox.showinfo('Copy Path', text)
 
-    def _bind_selectable_table(self, tree, *, on_select, on_double=None, on_right=None):
+    def _bind_selectable_table(self, tree, *, on_select, on_double=None, on_right=None, on_enter=None):
         """Wire standard table selection: click, keyboard, double-click, right-click."""
         tree.bind('<<TreeviewSelect>>', lambda e: on_select())
         if on_double:
             tree.bind('<Double-Button-1>', on_double)
         if on_right:
             tree.bind('<Button-3>', on_right)
+        if on_enter:
+            tree.bind('<Return>', on_enter)
         for key in ('<Up>', '<Down>', '<Prior>', '<Next>'):
             tree.bind(key, lambda e: self.after_idle(on_select))
 
@@ -6167,15 +6211,22 @@ class StartupManagerGUI(ctk.CTk):
         rp = self._find_receipt_for_paths(
             entry.get('src') if entry else None, entry.get('dest') if entry else None)
         has = entry is not None
+        can_restore = (
+            has and bool(entry.get('present'))
+            and entry.get('kind') not in ('prune', 'restore')
+        )
+        has_path = has and bool(entry.get('dest') or entry.get('src'))
         self._show_row_popover(
             event.x_root, event.y_root,
             [
                 ('Open Receipt', self._activity_open_receipt, has and bool(rp)),
-                ('Open Archive Folder', self._activity_open_archive, has and bool(entry.get('dest') if entry else False)),
-                ('Copy proof details', self._activity_copy_proof, has),
-                ('Restore', self._activity_restore_selected, has and bool(entry.get('present') if entry else False)),
+                ('Open Archive', self._activity_open_archive,
+                 has and bool(entry.get('dest') if entry else False)),
+                ('Copy Proof', self._activity_copy_proof, has),
                 ('Verify Custody', self.verify_custody, True),
-                ('Refresh', self.refresh_activity, True),
+                ('Restore', self._activity_restore_selected, can_restore),
+                ('Copy Path', self._activity_copy_path, has_path),
+                ('Copy Event Details', self._activity_copy_proof, has),
             ],
             title='Proof ledger',
         )
@@ -6291,6 +6342,7 @@ class StartupManagerGUI(ctk.CTk):
             return
         if hasattr(self, '_proof_summary'):
             self._proof_summary.show_recommendation(rec)
+            self._proof_summary.set_action_handlers()
 
     def _recommendation_action_label(self, rec):
         title = (rec.get('title') or '').lower()
@@ -7417,8 +7469,7 @@ class StartupManagerGUI(ctk.CTk):
             self._select_recommendation_card(0)
         else:
             self._selected_rec_idx = None
-            if hasattr(self, '_proof_summary'):
-                self._proof_summary.show_idle('No recommendations — scan or review startup items.')
+        self._sync_home_proof_panel()
 
         self.refresh_foresight()
         self._refresh_header_proof_badges()
@@ -7426,6 +7477,78 @@ class StartupManagerGUI(ctk.CTk):
         self._update_recent_proof()
 
     refresh_optimizer = refresh_dashboard
+
+    def _sync_home_proof_panel(self):
+        """Keep Home proof summary live — never a dead panel when scan/receipt data exists."""
+        if not hasattr(self, '_proof_summary'):
+            return
+        ps = self._proof_summary
+        recs = getattr(self, '_dashboard_recommendations', []) or []
+        if recs:
+            if getattr(self, '_selected_rec_idx', None) is None:
+                self._select_recommendation_card(0)
+            return
+        count = len(self.cleanup_items) if getattr(self, '_scan_session_done', False) else 0
+        if count > 0:
+            checked = len(self.cleanup_selected)
+            size = self._format_size(self.cleanup_total_size)
+            ps.show_scan_results(count, size, checked)
+            ps.set_action_handlers(
+                open_cb=self.preview_cleanup_receipt,
+                copy_cb=self._copy_scan_summary,
+                view_cb=lambda: self._navigate_to_tab(3),
+            )
+            return
+        if receipts_module:
+            try:
+                path = receipts_module.latest_receipt()
+                if path:
+                    ps.show_latest_receipt(Path(path).name)
+                    ps.set_action_handlers(
+                        open_cb=self.open_last_receipt,
+                        copy_cb=self._copy_latest_receipt_summary,
+                        view_cb=self.open_last_receipt,
+                    )
+                    return
+            except Exception:
+                pass
+        ps.show_idle('Run Scan to review folders, or open Proof Ledger for custody history.')
+
+    def _copy_scan_summary(self):
+        n = len(self.cleanup_items)
+        checked = len(self.cleanup_selected)
+        size = self._format_size(self.cleanup_total_size)
+        text = (
+            'CLEANROOM — SCAN SUMMARY\n\n'
+            f'Candidates: {n:,}\n'
+            f'Checked for archive: {checked:,}\n'
+            f'Reclaimable: {size}\n\n'
+            'Open Cleaner to review paths and preview the receipt before archiving.'
+        )
+        try:
+            self.clipboard_clear()
+            self.clipboard_append(text)
+            self._set_status('Scan summary copied.')
+        except tk.TclError:
+            messagebox.showinfo('Scan Summary', text)
+
+    def _copy_latest_receipt_summary(self):
+        if not receipts_module:
+            return
+        try:
+            path = receipts_module.latest_receipt()
+        except Exception:
+            path = None
+        if not path:
+            messagebox.showinfo('Receipt', 'No receipt on disk yet.')
+            return
+        text = f'CLEANROOM — LATEST RECEIPT\n\n{Path(path).name}\n{path}'
+        try:
+            self.clipboard_clear()
+            self.clipboard_append(text)
+            self._set_status('Receipt summary copied.')
+        except tk.TclError:
+            messagebox.showinfo('Receipt', text)
 
     def _update_dashboard_cta(self):
         if not hasattr(self, 'dashboard_primary_btn'):
@@ -7630,7 +7753,7 @@ class StartupManagerGUI(ctk.CTk):
         hour_spin.focus_set()
 
     # ------------------------------------------------------------------
-    # Telemetry dialog
+    # Diagnostics dialog (local-only; no cloud)
     # ------------------------------------------------------------------
     def _show_delete_result_dialog(self, *, deleted, skipped, freed, receipt_path=None):
         lines = [
