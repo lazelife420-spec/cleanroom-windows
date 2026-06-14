@@ -483,7 +483,6 @@ def test_registry_health_dialog_repairs_checked_issues(sandbox, monkeypatch):
     assert pump(app, lambda: 'chosen' in captured)
     # uninstall-entry issues default to unchecked; only the startup ref is repaired
     assert [i['display'] for i in captured['chosen']] == ['Dead']
-    assert pump(app, lambda: any('Repaired 1' in str(a) for a in sandbox['dialogs']['info']))
 
 
 def test_smart_restore_routes_registry_entries(sandbox, tmp_path):

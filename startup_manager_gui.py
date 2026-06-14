@@ -1005,6 +1005,14 @@ class StartupManagerGUI(ctk.CTk):
                     foreground=badge_fg, padding=(8, 4))
         s.configure('Status.TLabel', font=('Segoe UI', 9), background=STATUS_BG, foreground=TEXT, padding=(8, 4))
         s.configure('TNotebook', background=BG, borderwidth=0)
+        s.configure('TPanedwindow', background=BORDER)
+        try:
+            s.configure(
+                'Sash', sashthickness=6, sashpad=2,
+                background=ACCENT, lightchild=BORDER, darkchild=BORDER,
+            )
+        except Exception:
+            pass
         s.configure('TCheckbutton', background=BG, foreground=TEXT)
         s.map('TCheckbutton', background=[('active', BG)])
         self._hide_notebook_tabs()
@@ -1246,15 +1254,14 @@ class StartupManagerGUI(ctk.CTk):
     def _update_cleanup_empty_state(self):
         if not hasattr(self, '_cleanup_empty_panel'):
             return
-        empty = not self.cleanup_items
-        sync_table_empty_view(
-            has_rows=not empty,
-            table_card=self._cleanup_tree_card,
-            detail_panel=self._cleanup_detail_panel,
-            empty_panel=self._cleanup_empty_panel,
+        sync_split_workspace(
+            loading=getattr(self, '_cleaner_loading', False),
+            has_rows=bool(self.cleanup_items),
             pane=getattr(self, '_cleanup_pane', None),
-            hide_detail_when_empty=True,
+            empty_panel=self._cleanup_empty_panel,
+            loading_panel=getattr(self, '_cleanup_loading_panel', None),
         )
+        empty = not self.cleanup_items and not getattr(self, '_cleaner_loading', False)
         if hasattr(self, '_cleanup_chips'):
             if empty:
                 self._cleanup_chips.grid_remove()
@@ -1586,6 +1593,8 @@ class StartupManagerGUI(ctk.CTk):
              'Find registry entries pointing at missing files.'),
             ('Rewind', self.open_time_machine,
              'Roll back whole days of Cleanroom actions.'),
+            ('Receipt', self.open_last_receipt,
+             'Open the most recent Cleanroom receipt from disk.'),
             ('Proof Pack', self.export_audit,
              'Generate a shareable HTML proof report.'),
             ('Custody Check', self.verify_custody,
@@ -1676,6 +1685,14 @@ class StartupManagerGUI(ctk.CTk):
                     p, k, default=d, min_left=340, min_right=260, default_ratio=0.62))
         self._sync_sidebar_sections(current)
         self._lazy_load_tab(current)
+        if hasattr(self, '_archive_badge'):
+            try:
+                if current in (0, 3):
+                    self._archive_badge.pack(side='left', padx=(8, 0))
+                else:
+                    self._archive_badge.pack_forget()
+            except Exception:
+                pass
 
     def _collapse_archive_banner(self):
         self._archive_banner_collapsed = True
@@ -1685,20 +1702,11 @@ class StartupManagerGUI(ctk.CTk):
         self._update_page_chrome()
 
     def _set_activity_loading(self, loading: bool):
-        if not hasattr(self, '_activity_loading_lbl'):
-            return
-        if loading:
-            self._activity_loading_lbl.place(relx=0.5, rely=0.42, anchor='center')
-            if hasattr(self, '_activity_tree_card'):
-                self._activity_tree_card.pack_forget()
-        else:
-            self._activity_loading_lbl.place_forget()
-            if hasattr(self, '_activity_tree_card'):
-                self._activity_tree_card.pack(fill='both', expand=True)
-            if hasattr(self, '_activity_pane'):
-                self._ensure_pane(
-                    self._activity_pane, 'activity_split', default=520,
-                    min_left=340, min_right=260, default_ratio=0.68)
+        self._sync_activity_view(loading=loading)
+        if not loading and hasattr(self, '_activity_pane'):
+            self._ensure_pane(
+                self._activity_pane, 'activity_split', default=520,
+                min_left=340, min_right=260, default_ratio=0.68)
 
     def _update_page_chrome(self, tab_idx=None):
         """Single app shell header — no stacked context/archive banners."""
@@ -1899,17 +1907,24 @@ class StartupManagerGUI(ctk.CTk):
         self.activity_tab.grid_rowconfigure(2, weight=1)
         self.activity_tab.grid_columnconfigure(0, weight=1)
 
-        head = ttk.Frame(self.activity_tab, style='Content.TFrame')
-        head.grid(row=0, column=0, sticky='ew', padx=10, pady=(6, 4))
-        head_left = ttk.Frame(head, style='Content.TFrame')
-        head_left.pack(side='left', fill='x', expand=True)
-        ttk.Label(head_left, text='Proof Ledger', font=('Segoe UI', 18, 'bold'),
-                  background=BG).pack(anchor='w')
-        ttk.Label(head_left, text='Every action has a receipt.',
-                  style='Info.TLabel').pack(anchor='w', pady=(2, 0))
-        self.act_status_lbl = ttk.Label(head, text='', style='Badge.TLabel')
-        self.act_status_lbl.pack(side='left', padx=(10, 0))
-        self.act_refresh_btn = ttk.Button(head, text='Refresh', style='Action.TButton',
+        head = ctk_theme.frame(self.activity_tab, CARD_BG, corner_radius=10)
+        head.grid(row=0, column=0, sticky='ew', padx=10, pady=(4, 4))
+        head_inner = ttk.Frame(head, style='Card.TFrame')
+        head_inner.pack(fill='x', padx=12, pady=8)
+        title_row = ttk.Frame(head_inner, style='Card.TFrame')
+        title_row.pack(fill='x')
+        ttk.Label(title_row, text='Proof Ledger', font=('Segoe UI', 15, 'bold'),
+                  background=CARD_BG).pack(side='left')
+        self.trust_band_lbl = tk.Label(title_row, text='—', bg=CARD_BG, fg=PROOF,
+                                       font=('Segoe UI', 11, 'bold'))
+        self.trust_band_lbl.pack(side='left', padx=(12, 0))
+        self.trust_sub_lbl = tk.Label(title_row, text='', bg=CARD_BG, fg=MUTED,
+                                      font=('Segoe UI', 9), wraplength=360, justify='left')
+        self.trust_sub_lbl.pack(side='left', padx=(8, 0))
+        self.trust_canvas = tk.Canvas(title_row, width=1, height=1, bg=CARD_BG, highlightthickness=0)
+        self.act_status_lbl = ttk.Label(title_row, text='', style='Badge.TLabel')
+        self.act_status_lbl.pack(side='left', padx=(8, 0))
+        self.act_refresh_btn = ttk.Button(title_row, text='Refresh', style='Action.TButton',
                                           command=self.refresh_activity)
         self.act_refresh_btn.pack(side='right')
 
@@ -1917,22 +1932,8 @@ class StartupManagerGUI(ctk.CTk):
         top.grid(row=1, column=0, sticky='ew', padx=10, pady=(0, 6))
         self._activity_top = top
 
-        proof_strip = ctk_theme.frame(top, PROOF_SOFT, corner_radius=10)
-        proof_strip.pack(side='left', fill='x', expand=True, padx=(0, 8))
-        proof_inner = ttk.Frame(proof_strip, style='Card.TFrame')
-        proof_inner.pack(fill='x', padx=12, pady=8)
-        ttk.Label(proof_inner, text='Proof summary', font=('Segoe UI', 9, 'bold'),
-                  background=PROOF_SOFT).pack(side='left')
-        self.trust_band_lbl = tk.Label(proof_inner, text='—', bg=PROOF_SOFT, fg=PROOF,
-                                       font=('Segoe UI', 12, 'bold'))
-        self.trust_band_lbl.pack(side='left', padx=(10, 0))
-        self.trust_sub_lbl = tk.Label(proof_inner, text='', bg=PROOF_SOFT, fg=TEXT,
-                                      font=('Segoe UI', 9), wraplength=360, justify='left')
-        self.trust_sub_lbl.pack(side='left', padx=(10, 0))
-        self.trust_canvas = tk.Canvas(proof_inner, width=1, height=1, bg=PROOF_SOFT, highlightthickness=0)
-
         stats_wrap = ttk.Frame(top, style='Content.TFrame')
-        stats_wrap.pack(side='right')
+        stats_wrap.pack(fill='x')
         for col in range(4):
             stats_wrap.grid_columnconfigure(col, weight=1)
         self.stat_act_total = self._stat_card_compact(stats_wrap, 0, 'Actions logged')
@@ -1957,7 +1958,7 @@ class StartupManagerGUI(ctk.CTk):
             min_left=340, min_right=260, default_ratio=0.68)
 
         self._activity_loading_lbl = ttk.Label(
-            activity_left,
+            self._activity_container,
             text='Loading proof ledger…',
             style='Info.TLabel',
             font=('Segoe UI', 12),
@@ -2042,19 +2043,32 @@ class StartupManagerGUI(ctk.CTk):
         )
         self._activity_context_menu = None
 
+        self._activity_empty_panel = self._build_workspace_empty_panel(
+            self._activity_container,
+            'No Cleanroom actions yet',
+            'Run a cleanup — every archive-first move appears here with proof status.',
+            'Open Cleaner', lambda: self._navigate_to_tab(3),
+        )
+        self._sync_activity_view(loading=False)
+
     def _build_archive_tab(self):
         """Dedicated archive custody manager — browse, restore, delete."""
         self.archive_tab.grid_rowconfigure(4, weight=1)
         self.archive_tab.grid_columnconfigure(0, weight=1)
         self._archive_split_mode = 'wide'
 
-        header = ttk.Frame(self.archive_tab, style='Content.TFrame')
-        header.grid(row=0, column=0, sticky='ew', padx=10, pady=(6, 2))
-        ttk.Label(header, text='Archive Custody', style='Header.TLabel').pack(side='left')
+        header = ctk_theme.frame(self.archive_tab, CARD_BG, corner_radius=10)
+        header.grid(row=0, column=0, sticky='ew', padx=10, pady=(4, 4))
+        header_inner = ttk.Frame(header, style='Card.TFrame')
+        header_inner.pack(fill='x', padx=12, pady=8)
+        title_row = ttk.Frame(header_inner, style='Card.TFrame')
+        title_row.pack(fill='x')
+        ttk.Label(title_row, text='Archive Custody', font=('Segoe UI', 15, 'bold'),
+                  background=CARD_BG).pack(side='left')
         self._archive_subheader = ttk.Label(
-            header,
+            title_row,
             text='Browse custody · delete archived copies only · originals never touched.',
-            style='SubHeader.TLabel', wraplength=640,
+            style='Info.TLabel', wraplength=640,
         )
         self._archive_subheader.pack(side='left', padx=(10, 0), anchor='w')
 
@@ -2892,6 +2906,10 @@ class StartupManagerGUI(ctk.CTk):
         ttk.Button(
             empty_inner, text='Scan Now', style='Primary.TButton', command=self.refresh_cleanup,
         ).pack(anchor='center')
+        self._cleanup_loading_panel = ttk.Label(
+            body, text='Scanning folders for cleanup candidates…',
+            style='Info.TLabel', font=('Segoe UI', 12), anchor='center',
+        )
         self._update_cleanup_empty_state()
 
         status = ttk.Frame(self.cleanup_tab)
@@ -3320,7 +3338,7 @@ class StartupManagerGUI(ctk.CTk):
             hdr, 'Settings', text_color=TEXT, font_size=ctk_theme.TYPE_PAGE, weight='bold',
         ).pack(anchor='w')
         ctk_theme.label(
-            hdr, 'Control Room — application preferences, scan paths, archive rules, and tools.',
+            hdr, 'Scan paths, archive rules, and application preferences.',
             text_color=MUTED, font_size=ctk_theme.TYPE_MICRO,
         ).pack(anchor='w', pady=(2, 0))
 
@@ -4548,39 +4566,35 @@ class StartupManagerGUI(ctk.CTk):
 
     def _show_leftover_dialog(self, entry, paths, reg_keys=(), force_remove=False):
         program_name = entry.get('name') or 'program'
-        dlg = tk.Toplevel(self)
-        dlg.configure(bg=BG)
-        dlg.title('Force removal' if force_remove else 'Leftovers found')
-        dlg.geometry('680x440')
-        dlg.transient(self)
-        dlg.grab_set()
-        dlg.bind('<Escape>', lambda e: dlg.destroy())
-
         title = ('Force removal' if force_remove else 'Leftovers') + f' — "{program_name}"'
-        ttk.Label(dlg, text=title,
-                  font=('Segoe UI', 12, 'bold')).pack(anchor='w', padx=14, pady=(14, 2))
+        dlg = CleanroomModal(
+            self, 'Force removal' if force_remove else 'Leftovers found',
+            width=680, height=440, resizable=True, colors=self._dialog_colors(),
+        )
+        dlg.heading(title)
         if program_advice:
             advice = program_advice.analyze_program(entry)
-            ttk.Label(dlg, text=advice['need'], style='Info.TLabel',
-                      wraplength=640).pack(anchor='w', padx=14, pady=(0, 4))
+            dlg.message(advice['need'], wrap=620)
         note = ('Checked folders are MOVED to the archive (not deleted). Checked registry '
                 'keys are EXPORTED to a .reg file in the archive before removal. Both can '
                 'be restored from the Restore tab or Cleanroom Rewind.')
         if force_remove:
             note += ' The orphaned Programs-list entry is removed afterwards (.reg backup).'
-        ttk.Label(dlg, text=note,
-                  style='Info.TLabel', wraplength=640).pack(anchor='w', padx=14, pady=(0, 8))
+        ctk_theme.label(
+            dlg.body, note, text_color=dlg.colors['muted'], font_size=10,
+            wraplength=620, justify='left',
+        ).pack(anchor='w', pady=(8, 0))
 
-        body = ttk.Frame(dlg, style='Card.TFrame')
-        body.pack(fill='both', expand=True, padx=14, pady=(0, 8))
-        canvas = tk.Canvas(body, bg=CARD_BG, highlightthickness=0)
-        vsb = ttk.Scrollbar(body, orient='vertical', command=canvas.yview)
+        scroll_host = ctk.CTkFrame(dlg.body, fg_color=dlg.colors['head'], corner_radius=8)
+        scroll_host.pack(fill='both', expand=True, pady=(10, 0))
+        canvas = tk.Canvas(scroll_host, bg=dlg.colors['head'], highlightthickness=0)
+        vsb = ttk.Scrollbar(scroll_host, orient='vertical', command=canvas.yview)
         inner = ttk.Frame(canvas, style='Card.TFrame')
         inner.bind('<Configure>', lambda e: canvas.configure(scrollregion=canvas.bbox('all')))
         canvas.create_window((0, 0), window=inner, anchor='nw')
         canvas.configure(yscrollcommand=vsb.set)
-        canvas.pack(side='left', fill='both', expand=True)
-        vsb.pack(side='right', fill='y')
+        canvas.pack(side='left', fill='both', expand=True, padx=4, pady=4)
+        vsb.pack(side='right', fill='y', pady=4)
 
         check_vars = []
         for p in paths:
@@ -4603,13 +4617,10 @@ class StartupManagerGUI(ctk.CTk):
             ttk.Label(inner, text=f'🗝 {uninstaller.uninstall_key_path(entry)}',
                       style='CardInfo.TLabel').pack(anchor='w', padx=16, pady=(0, 4))
 
-        footer = ttk.Frame(dlg, style='Content.TFrame')
-        footer.pack(fill='x', padx=14, pady=(0, 12))
-
         def do_archive():
             chosen_dirs = [p for var, kind, p in check_vars if var.get() and kind == 'dir']
             chosen_keys = [p for var, kind, p in check_vars if var.get() and kind == 'reg']
-            dlg.destroy()
+            dlg.close()
             if not chosen_dirs and not chosen_keys and not force_remove:
                 return
             archive_dir = self._archive_dir_from_config()
@@ -4643,7 +4654,10 @@ class StartupManagerGUI(ctk.CTk):
                         summary += ('\n\nCould not remove the Programs-list entry — HKLM entries '
                                     'require running as administrator.')
                 summary += '\n\nEverything appears in the Restore tab if you change your mind.'
-                messagebox.showinfo('Force remove' if force_remove else 'Leftovers', summary)
+                self._show_info_modal(
+                    'Force remove' if force_remove else 'Leftovers', summary,
+                    width=520, height=280,
+                )
                 self.refresh_restore()
                 if force_remove:
                     self.refresh_uninstaller()
@@ -4651,10 +4665,8 @@ class StartupManagerGUI(ctk.CTk):
             self._run_bg(work, done)
 
         btn_label = 'Archive & force remove' if force_remove else 'Archive selected'
-        ttk.Button(footer, text=btn_label, style='Primary.TButton',
-                   command=do_archive).pack(side='right')
-        ttk.Button(footer, text='Cancel', style='Action.TButton',
-                   command=dlg.destroy).pack(side='right', padx=(0, 8))
+        dlg.add_button('Cancel', dlg.close)
+        dlg.add_button(btn_label, do_archive, primary=True)
 
     # ------------------------------------------------------------------
     # Keyboard shortcuts / accessibility
@@ -5061,6 +5073,23 @@ class StartupManagerGUI(ctk.CTk):
             empty_panel=getattr(self, '_archive_empty_panel', None),
             loading_panel=getattr(self, '_archive_loading_lbl', None),
         )
+
+    def _sync_activity_view(self, *, loading=False):
+        has = bool(self.activity_tree.get_children()) if hasattr(self, 'activity_tree') else False
+        sync_split_workspace(
+            loading=loading, has_rows=has,
+            pane=getattr(self, '_activity_pane', None),
+            empty_panel=getattr(self, '_activity_empty_panel', None),
+            loading_panel=getattr(self, '_activity_loading_lbl', None),
+        )
+
+    def _show_info_modal(self, title, message, *, width=460, height=220):
+        dlg = CleanroomModal(
+            self, title, width=width, height=height, colors=self._dialog_colors(),
+        )
+        dlg.heading(title)
+        dlg.message(message, wrap=max(280, width - 80))
+        dlg.add_button('OK', dlg.close, primary=True)
 
     def _refresh_empty_hint(self, hint, tree):
         if tree.get_children():
@@ -5591,6 +5620,7 @@ class StartupManagerGUI(ctk.CTk):
 
             def on_complete():
                 self._set_activity_loading(False)
+                self._sync_activity_view(loading=False)
                 self.act_status_lbl.config(
                     text=f'{summary["total_actions"]:,} actions · custody trust {trust}%'
                     if custody['total'] else 'Awaiting first action')
@@ -5822,47 +5852,46 @@ class StartupManagerGUI(ctk.CTk):
     def confirm_delete_older_than(self):
         if archive_custody is None:
             return
-        dlg = tk.Toplevel(self)
-        dlg.title('Delete Older Than')
-        dlg.transient(self)
-        dlg.grab_set()
-        frm = ttk.Frame(dlg, padding=12)
-        frm.pack(fill='both', expand=True)
-        ttk.Label(frm, text='Permanently delete archive copies older than:',
-                  style='Header.TLabel').pack(anchor='w')
+        dlg = CleanroomModal(
+            self, 'Delete Older Than', width=440, height=280, colors=self._dialog_colors(),
+        )
+        dlg.heading('Delete older archive copies')
+        dlg.message(
+            'Permanently delete archive copies older than the selected age.\n'
+            'Original live files are never touched.',
+            wrap=380,
+        )
+        spin_row = ctk.CTkFrame(dlg.body, fg_color=dlg.colors['card'])
+        spin_row.pack(anchor='w', pady=(8, 0))
+        ctk_theme.label(spin_row, 'Older than (days):', text_color=dlg.colors['text']).pack(side='left')
         days_var = tk.IntVar(value=90)
-        spin = ttk.Spinbox(frm, from_=1, to=3650, textvariable=days_var, width=8)
-        spin.pack(anchor='w', pady=(8, 4))
-        ttk.Label(frm, text='days (original live files are never touched)',
-                  style='Info.TLabel').pack(anchor='w')
-        preview_lbl = ttk.Label(frm, text='', style='CardInfo.TLabel', wraplength=360)
-        preview_lbl.pack(anchor='w', pady=(10, 4))
+        spin = ttk.Spinbox(spin_row, from_=1, to=3650, textvariable=days_var, width=8)
+        spin.pack(side='left', padx=(8, 0))
+        preview_lbl = ctk_theme.label(
+            dlg.body, '', text_color=dlg.colors['muted'], font_size=10, wraplength=380, justify='left',
+        )
+        preview_lbl.pack(anchor='w', pady=(10, 0))
 
         def refresh_preview(*_):
             recs = archive_custody.filter_older_than_days(
                 getattr(self, '_archive_records_all', []) or [], days_var.get())
             freed = self._format_size(sum(int(r.get('size') or 0) for r in recs))
-            preview_lbl.config(text=f'Preview: {len(recs)} item(s) · {freed}')
+            preview_lbl.configure(text=f'Preview: {len(recs)} item(s) · {freed}')
 
         days_var.trace_add('write', refresh_preview)
         refresh_preview()
 
-        btns = ttk.Frame(frm)
-        btns.pack(fill='x', pady=(12, 0))
-
         def go():
             recs = archive_custody.filter_older_than_days(
                 getattr(self, '_archive_records_all', []) or [], days_var.get())
-            dlg.destroy()
+            dlg.close()
             if not recs:
-                messagebox.showinfo('Delete from Archive', 'No matching archive items for that age.')
+                self._show_info_modal('Delete from Archive', 'No matching archive items for that age.')
                 return
             self._run_archive_delete(recs, context='archive')
 
-        ttk.Button(btns, text='Cancel', style='Action.TButton', command=dlg.destroy).pack(side='right')
-        ttk.Button(btns, text='Delete Matching Items', style='Primary.TButton', command=go).pack(
-            side='right', padx=(0, 8))
-        dlg.geometry('420x220')
+        dlg.add_button('Cancel', dlg.close)
+        dlg.add_button('Delete Matching Items', go, primary=True)
 
     def _selected_archive_records(self):
         sel = self.archive_tree.selection()
@@ -6817,7 +6846,10 @@ class StartupManagerGUI(ctk.CTk):
             return
         path = receipts_module.latest_receipt()
         if path is None:
-            messagebox.showinfo('Receipt', 'No receipts yet — run a cleanup first.')
+            self._show_info_modal(
+                'Receipt',
+                'No receipts yet — run a cleanup first.',
+            )
             return
         self._view_receipt_file(path)
 
@@ -6840,8 +6872,10 @@ class StartupManagerGUI(ctk.CTk):
                 messagebox.showerror('Verify Custody', f'Unable to load cleanup log:\n{e}')
                 return
         if not entries:
-            messagebox.showinfo('Verify Custody',
-                                'Nothing to verify yet — the cleanup log is empty.')
+            self._show_info_modal(
+                'Verify Custody',
+                'Nothing to verify yet — the cleanup log is empty.',
+            )
             return
         self._set_status(f'Verifying custody of {len(entries)} archived item(s)…')
 
@@ -6887,41 +6921,41 @@ class StartupManagerGUI(ctk.CTk):
                 messagebox.showerror('Registry Snapshot', f'Scan failed: {err}')
                 return
             if not result:
-                messagebox.showinfo('Registry Snapshot',
-                                    'No issues found — every startup ref, App Paths entry '
-                                    'and uninstaller this scan can verify points to a real file.')
+                self._show_info_modal(
+                    'Registry Snapshot',
+                    'No issues found — every startup ref, App Paths entry '
+                    'and uninstaller this scan can verify points to a real file.',
+                    height=240,
+                )
                 return
             self._show_registry_health_dialog(result)
 
         self._run_bg(registry_health.find_registry_issues, done)
 
     def _show_registry_health_dialog(self, issues):
-        dlg = tk.Toplevel(self)
-        dlg.configure(bg=BG)
-        dlg.title('Registry Snapshot')
-        dlg.geometry('720x420')
-        dlg.transient(self)
-        dlg.grab_set()
-        dlg.bind('<Escape>', lambda e: dlg.destroy())
+        dlg = CleanroomModal(
+            self, 'Registry Snapshot', width=720, height=420,
+            resizable=True, colors=self._dialog_colors(),
+        )
+        dlg.heading(f'{len(issues)} issue(s) found')
+        dlg.message(
+            'Only entries that verifiably point to missing files are listed. '
+            'Checked items are EXPORTED to .reg backups in the archive before '
+            'removal — restorable from the Restore tab or Cleanroom Rewind. '
+            'HKLM items need admin rights.',
+            wrap=660,
+        )
 
-        ttk.Label(dlg, text=f'Registry Snapshot — {len(issues)} issue(s) found',
-                  font=('Segoe UI', 12, 'bold')).pack(anchor='w', padx=14, pady=(14, 2))
-        ttk.Label(dlg, text='Only entries that verifiably point to missing files are listed. '
-                            'Checked items are EXPORTED to .reg backups in the archive before '
-                            'removal — restorable from the Restore tab or Cleanroom Rewind. '
-                            'HKLM items need admin rights.',
-                  style='Info.TLabel', wraplength=680).pack(anchor='w', padx=14, pady=(0, 8))
-
-        body = ttk.Frame(dlg, style='Card.TFrame')
-        body.pack(fill='both', expand=True, padx=14, pady=(0, 8))
-        canvas = tk.Canvas(body, bg=CARD_BG, highlightthickness=0)
-        vsb = ttk.Scrollbar(body, orient='vertical', command=canvas.yview)
+        scroll_host = ctk.CTkFrame(dlg.body, fg_color=dlg.colors['head'], corner_radius=8)
+        scroll_host.pack(fill='both', expand=True, pady=(10, 0))
+        canvas = tk.Canvas(scroll_host, bg=dlg.colors['head'], highlightthickness=0)
+        vsb = ttk.Scrollbar(scroll_host, orient='vertical', command=canvas.yview)
         inner = ttk.Frame(canvas, style='Card.TFrame')
         inner.bind('<Configure>', lambda e: canvas.configure(scrollregion=canvas.bbox('all')))
         canvas.create_window((0, 0), window=inner, anchor='nw')
         canvas.configure(yscrollcommand=vsb.set)
-        canvas.pack(side='left', fill='both', expand=True)
-        vsb.pack(side='right', fill='y')
+        canvas.pack(side='left', fill='both', expand=True, padx=4, pady=4)
+        vsb.pack(side='right', fill='y', pady=4)
 
         icons = {'startup-ref': '🚀', 'app-path': '🔗', 'uninstall-entry': '🧩'}
         check_vars = []
@@ -6937,14 +6971,9 @@ class StartupManagerGUI(ctk.CTk):
                                   + (f" :: {issue['value_name']}" if issue['value_name'] else ''))
             check_vars.append((var, issue))
 
-        btns = ttk.Frame(dlg, style='Content.TFrame')
-        btns.pack(fill='x', padx=14, pady=(0, 12))
-        ttk.Button(btns, text='Cancel', style='Action.TButton',
-                   command=dlg.destroy).pack(side='right')
-
         def repair():
             chosen = [issue for var, issue in check_vars if var.get()]
-            dlg.destroy()
+            dlg.close()
             if not chosen:
                 return
             archive_dir = self._archive_dir_from_config()
@@ -6965,17 +6994,16 @@ class StartupManagerGUI(ctk.CTk):
                 if skipped:
                     msg += (f'\n{skipped} item(s) could not be removed '
                             '(HKLM entries need admin rights).')
-                messagebox.showinfo('Registry Snapshot', msg)
+                self._show_info_modal('Registry Snapshot', msg, width=480, height=240)
                 self.refresh_restore()
                 self.refresh_uninstaller()
 
             self._run_bg(work, done)
 
-        repair_btn = ttk.Button(btns, text='Repair (Archive First)', style='Primary.TButton',
-                                command=repair)
-        repair_btn.pack(side='right', padx=6)
         self._reg_health_repair = repair  # E2E hook
-        dlg.bind('<Return>', lambda e: repair())
+        dlg.win.bind('<Return>', lambda e: repair())
+        dlg.add_button('Cancel', dlg.close)
+        dlg.add_button('Repair (Archive First)', repair, primary=True)
 
     # ------------------------------------------------------------------
     # Cleanroom Rewind (roll back whole days of actions)
@@ -6993,21 +7021,19 @@ class StartupManagerGUI(ctk.CTk):
                 return
         buckets = timeline_module.build_timeline(actions)
 
-        dlg = tk.Toplevel(self)
-        dlg.configure(bg=BG)
-        dlg.title('Cleanroom Rewind')
-        dlg.geometry('760x440')
-        dlg.transient(self)
-        dlg.grab_set()
-        dlg.bind('<Escape>', lambda e: dlg.destroy())
+        dlg = CleanroomModal(
+            self, 'Cleanroom Rewind', width=760, height=440,
+            resizable=True, colors=self._dialog_colors(),
+        )
+        dlg.heading('Cleanroom Rewind')
+        dlg.message(
+            'Every archive-first action grouped by day. Pick a day and roll the whole '
+            'thing back — files return to their original locations.',
+            wrap=720,
+        )
 
-        ttk.Label(dlg, text='🕐 Cleanroom Rewind', font=('Segoe UI', 13, 'bold')).pack(anchor='w', padx=14, pady=(14, 2))
-        ttk.Label(dlg, text='Every archive-first action grouped by day. Pick a day and roll the whole '
-                            'thing back — files return to their original locations.',
-                  style='Info.TLabel', wraplength=720).pack(anchor='w', padx=14, pady=(0, 8))
-
-        wrap = ttk.Frame(dlg, style='Card.TFrame')
-        wrap.pack(fill='both', expand=True, padx=14, pady=(0, 8))
+        wrap = ttk.Frame(dlg.body, style='Card.TFrame')
+        wrap.pack(fill='both', expand=True, pady=(10, 0))
         cols = ('date', 'count', 'size', 'restorable', 'reasons')
         tree = ttk.Treeview(wrap, columns=cols, show='headings', selectmode='browse')
         tree.heading('date', text='Day')
@@ -7038,26 +7064,26 @@ class StartupManagerGUI(ctk.CTk):
                      bg=CARD_BG, fg=MUTED, font=('Segoe UI', 10, 'italic'),
                      justify='center').place(relx=0.5, rely=0.4, anchor='center')
 
-        footer = ttk.Frame(dlg, style='Content.TFrame')
-        footer.pack(fill='x', padx=14, pady=(0, 12))
-        status_lbl = ttk.Label(footer, text='', style='Info.TLabel')
+        status_lbl = ttk.Label(dlg.body, text='', style='Info.TLabel')
+        status_lbl.pack(anchor='w', pady=(6, 0))
 
         def do_rollback():
             sel = tree.selection()
             if not sel:
-                messagebox.showinfo('Cleanroom Rewind', 'Select a day first.', parent=dlg)
+                self._show_info_modal('Cleanroom Rewind', 'Select a day first.')
                 return
             bucket = buckets[int(sel[0])]
             if bucket['restorable'] == 0:
-                messagebox.showinfo('Cleanroom Rewind',
-                                    'Nothing from that day is still in the archive.', parent=dlg)
+                self._show_info_modal(
+                    'Cleanroom Rewind', 'Nothing from that day is still in the archive.',
+                )
                 return
             if not messagebox.askyesno(
                     'Cleanroom Rewind',
                     f"Roll back {bucket['date']}?\n\n{bucket['restorable']} item(s) will be moved "
-                    'from the archive back to their original locations.', parent=dlg):
+                    'from the archive back to their original locations.', parent=dlg.win):
                 return
-            rollback_btn.config(state='disabled')
+            rollback_btn.configure(state='disabled')
             status_lbl.config(text=f"Rolling back {bucket['date']}…")
 
             def work():
@@ -7065,10 +7091,10 @@ class StartupManagerGUI(ctk.CTk):
                     bucket, lambda s, d: self._smart_restore(s, d, apply=True))
 
             def done(result, err):
-                rollback_btn.config(state='normal')
+                rollback_btn.configure(state='normal')
                 if err is not None:
                     status_lbl.config(text='Rollback failed.')
-                    messagebox.showerror('Cleanroom Rewind', f'Rollback failed: {err}', parent=dlg)
+                    messagebox.showerror('Cleanroom Rewind', f'Rollback failed: {err}', parent=dlg.win)
                     return
                 restored, skipped, failed, msgs = result
                 status_lbl.config(text=f'Restored {restored}, skipped {skipped}, failed {failed}.')
@@ -7077,17 +7103,13 @@ class StartupManagerGUI(ctk.CTk):
                     summary += f'\n{skipped} skipped (no longer in archive).'
                 if failed:
                     summary += f'\n{failed} failed:\n' + '\n'.join(msgs[:5])
-                messagebox.showinfo('Cleanroom Rewind', summary, parent=dlg)
+                self._show_info_modal('Cleanroom Rewind', summary, width=480, height=260)
                 self.refresh_restore()
 
             self._run_bg(work, done)
 
-        rollback_btn = ttk.Button(footer, text='Roll Back This Day', style='Primary.TButton',
-                                  command=do_rollback)
-        rollback_btn.pack(side='left')
-        ttk.Button(footer, text='Close', style='Action.TButton',
-                   command=dlg.destroy).pack(side='left', padx=6)
-        status_lbl.pack(side='left', padx=10)
+        rollback_btn = dlg.add_button('Roll Back This Day', do_rollback, primary=True, side='left')
+        dlg.add_button('Close', dlg.close, side='left')
 
     # ------------------------------------------------------------------
     # Restore
@@ -7489,22 +7511,21 @@ class StartupManagerGUI(ctk.CTk):
             messagebox.showerror('Schedule', 'Schedule script not found.')
             return
 
-        dialog = tk.Toplevel(self)
-        dialog.configure(bg=BG)
-        dialog.title('Schedule Cleanup')
-        dialog.geometry('420x360')
-        dialog.resizable(False, False)
-        dialog.transient(self)
-        dialog.grab_set()
-        dialog.bind('<Escape>', lambda e: dialog.destroy())
+        dialog = CleanroomModal(
+            self, 'Schedule Cleanup', width=440, height=400,
+            colors=self._dialog_colors(),
+        )
+        dialog.heading('Schedule recurring cleanup')
+        dialog.message(
+            'Creates a Windows scheduled task named CleanroomDaily that runs Cleanroom non-interactively.',
+            wrap=380,
+        )
 
-        ttk.Label(dialog, text='Schedule recurring cleanup', font=('Segoe UI', 12, 'bold')).pack(anchor='w', padx=16, pady=(14, 2))
-        ttk.Label(dialog, text='Creates a Windows scheduled task named CleanroomDaily that runs Cleanroom non-interactively.',
-                  style='Info.TLabel', wraplength=380).pack(anchor='w', padx=16, pady=(0, 10))
+        form = ctk.CTkFrame(dialog.body, fg_color=dialog.colors['card'])
+        form.pack(fill='x', pady=(8, 0))
 
-        # Time picker
-        time_row = ttk.Frame(dialog)
-        time_row.pack(anchor='w', padx=16, pady=(0, 8))
+        time_row = ttk.Frame(form, style='Card.TFrame')
+        time_row.pack(anchor='w', pady=(0, 8))
         ttk.Label(time_row, text='Run at:').pack(side='left', padx=(0, 8))
         hour_var = tk.StringVar(value='02')
         minute_var = tk.StringVar(value='00')
@@ -7517,8 +7538,8 @@ class StartupManagerGUI(ctk.CTk):
         minute_spin.pack(side='left')
 
         # Recurrence
-        recur_row = ttk.Frame(dialog)
-        recur_row.pack(anchor='w', padx=16, pady=(0, 8))
+        recur_row = ttk.Frame(form, style='Card.TFrame')
+        recur_row.pack(anchor='w', pady=(0, 8))
         ttk.Label(recur_row, text='Repeat:').pack(side='left', padx=(0, 8))
         recur_var = tk.StringVar(value='Daily')
         recur_combo = ttk.Combobox(recur_row, textvariable=recur_var, state='readonly',
@@ -7526,8 +7547,8 @@ class StartupManagerGUI(ctk.CTk):
         recur_combo.pack(side='left')
 
         # Weekday selection (enabled only for weekly)
-        days_frame = ttk.Labelframe(dialog, text='Days (weekly)')
-        days_frame.pack(fill='x', padx=16, pady=(0, 8))
+        days_frame = ttk.Labelframe(form, text='Days (weekly)')
+        days_frame.pack(fill='x', pady=(0, 8))
         day_codes = [('Mon', 'MON'), ('Tue', 'TUE'), ('Wed', 'WED'), ('Thu', 'THU'),
                      ('Fri', 'FRI'), ('Sat', 'SAT'), ('Sun', 'SUN')]
         day_vars = {}
@@ -7548,20 +7569,17 @@ class StartupManagerGUI(ctk.CTk):
         recur_combo.bind('<<ComboboxSelected>>', on_recur_change)
 
         dedupe_var = tk.BooleanVar(value=True)
-        ttk.Checkbutton(dialog, text='Deduplicate files during scheduled runs', variable=dedupe_var).pack(anchor='w', padx=16, pady=(2, 0))
+        ttk.Checkbutton(form, text='Deduplicate files during scheduled runs', variable=dedupe_var).pack(anchor='w', pady=(2, 0))
 
-        status_lbl = ttk.Label(dialog, text='', style='Info.TLabel', wraplength=380)
-        status_lbl.pack(anchor='w', padx=16, pady=(8, 0))
-
-        btns = ttk.Frame(dialog)
-        btns.pack(side='bottom', fill='x', padx=16, pady=14)
+        status_lbl = ttk.Label(dialog.body, text='', style='Info.TLabel', wraplength=380)
+        status_lbl.pack(anchor='w', pady=(8, 0))
 
         def on_schedule():
             time_value = f'{int(hour_var.get()):02d}:{int(minute_var.get()):02d}'
             schedule = 'WEEKLY' if recur_var.get() == 'Weekly' else 'DAILY'
             days = ','.join(code for code, var in day_vars.items() if var.get())
             if schedule == 'WEEKLY' and not days:
-                messagebox.showwarning('Schedule', 'Select at least one weekday.', parent=dialog)
+                self._show_info_modal('Schedule', 'Select at least one weekday.')
                 return
             args = [
                 'powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', str(script),
@@ -7577,34 +7595,33 @@ class StartupManagerGUI(ctk.CTk):
                 # Packaged app: schedule this very exe in headless mode
                 args += ['-ExePath', sys.executable]
 
-            schedule_btn.config(state='disabled')
+            schedule_btn.configure(state='disabled')
             status_lbl.config(text='Creating scheduled task...')
 
             def work():
                 return subprocess.run(args, capture_output=True, text=True)
 
             def done(result, err):
-                if not dialog.winfo_exists():
+                if not dialog.win.winfo_exists():
                     return
-                schedule_btn.config(state='normal')
+                schedule_btn.configure(state='normal')
                 if err is not None:
                     status_lbl.config(text='')
-                    messagebox.showerror('Schedule failed', f'Unable to schedule optimization:\n{err}', parent=dialog)
+                    messagebox.showerror('Schedule failed', f'Unable to schedule optimization:\n{err}', parent=dialog.win)
                     return
                 if result.returncode == 0:
                     when = f'{recur_var.get().lower()} at {time_value}' + (f' on {days}' if schedule == 'WEEKLY' else '')
                     self._set_status(f'Scheduled optimization {when}.')
-                    messagebox.showinfo('Schedule', f'Scheduled optimization {when}.', parent=dialog)
-                    dialog.destroy()
+                    self._show_info_modal('Schedule', f'Scheduled optimization {when}.')
+                    dialog.close()
                 else:
                     status_lbl.config(text='')
-                    messagebox.showerror('Schedule failed', result.stderr or result.stdout or 'Unknown error', parent=dialog)
+                    messagebox.showerror('Schedule failed', result.stderr or result.stdout or 'Unknown error', parent=dialog.win)
 
             self._run_bg(work, done)
 
-        schedule_btn = ttk.Button(btns, text='Schedule', style='Primary.TButton', command=on_schedule)
-        schedule_btn.pack(side='right')
-        ttk.Button(btns, text='Cancel', style='Action.TButton', command=dialog.destroy).pack(side='right', padx=(0, 6))
+        schedule_btn = dialog.add_button('Schedule', on_schedule, primary=True)
+        dialog.add_button('Cancel', dialog.close)
         hour_spin.focus_set()
 
     # ------------------------------------------------------------------

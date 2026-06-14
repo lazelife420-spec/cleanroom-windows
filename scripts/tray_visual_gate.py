@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Tray visual gate — real GUI session with pystray icon lifecycle checks."""
+"""Tray visual gate — real GUI session with pystray icon lifecycle checks.
+
+Automated checks cover menu build, hide/show, quit cleanup, and singleton behavior.
+Visible notification-area icon still requires manual confirmation — see docs/PR22-SIGNOFF.md.
+"""
 from __future__ import annotations
 
 import sys

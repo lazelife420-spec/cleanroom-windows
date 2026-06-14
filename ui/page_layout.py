@@ -276,6 +276,10 @@ def ensure_pane_sash(
 def create_horizontal_pane(parent, *, use_pack: bool = False, min_left: int = 280, min_right: int = 220):
     """Return (panedwindow, left_frame, right_frame)."""
     pane = ttk.PanedWindow(parent, orient='horizontal')
+    try:
+        pane.configure(sashwidth=6, sashrelief='flat')
+    except Exception:
+        pass
     if use_pack:
         pane.pack(fill='both', expand=True)
     else:
