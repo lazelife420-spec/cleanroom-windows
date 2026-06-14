@@ -1,5 +1,13 @@
 """Tray integration — wiring and failure-safe startup."""
-from ui.tray import TrayController
+import pytest
+
+from ui.tray import TrayController, get_active_tray, shutdown_all_trays
+
+
+@pytest.fixture(autouse=True)
+def _tray_teardown():
+    yield
+    shutdown_all_trays()
 
 
 class _FakeApp:
@@ -26,7 +34,7 @@ def test_tray_callbacks_schedule_app_actions(monkeypatch):
     app = _FakeApp()
     app._tray_show_window = lambda: app.calls.append('show')
     app._tray_hide_window = lambda: app.calls.append('hide')
-    app._tray_quit = lambda: app.calls.append('quit')
+    app._shutdown_app = lambda *_a, **_k: app.calls.append('quit')
     app.open_last_receipt = lambda: app.calls.append('receipt')
     app.export_audit = lambda: app.calls.append('proof')
     app.refresh_cleanup = lambda: app.calls.append('scan')
@@ -172,3 +180,46 @@ def test_tray_init_failure_does_not_crash_gui_init(monkeypatch):
     app = _MinimalGUI()
     app._init_tray()
     assert app._tray is None
+
+
+def test_get_active_tray_reflects_singleton():
+    import ui.tray as tray_mod
+    app = _FakeApp()
+    tray = TrayController(app)
+    tray_mod._active_tray = tray
+    try:
+        assert get_active_tray() is tray
+    finally:
+        tray_mod._active_tray = None
+
+
+def test_shutdown_all_trays_clears_singleton():
+    import ui.tray as tray_mod
+    app = _FakeApp()
+    tray = TrayController(app)
+    tray_mod._active_tray = tray
+    shutdown_all_trays()
+    assert tray_mod._active_tray is None
+
+
+def test_tray_start_twice_reuses_healthy_controller(monkeypatch):
+    import ui.tray as tray_mod
+
+    app = _FakeApp()
+    tray = TrayController(app)
+    tray._started = True
+    tray._icon = type('I', (), {'_running': True})()
+    tray._tray_thread = type('T', (), {'is_alive': lambda s: True})()
+    tray_mod._active_tray = tray
+
+    second = TrayController(app)
+    assert second.start() is True
+    assert tray_mod._active_tray is tray
+
+
+def test_tray_stop_is_idempotent():
+    app = _FakeApp()
+    tray = TrayController(app)
+    tray.stop()
+    tray.stop()
+    assert tray._icon is None

@@ -150,21 +150,14 @@ def run_gate(app: gui.StartupManagerGUI) -> None:
     import ui.tray as tray_mod
     first = getattr(app, '_tray', None)
     if first is not None:
-        first.stop()
-        app._tray = None
-    time.sleep(0.4)
-    CHECKS['singleton'] = tray_mod._active_tray is None
-
-    try:
-        app.quit()
-    except Exception:
-        pass
-    try:
-        app.destroy()
-    except Exception:
-        pass
-    CHECKS['quit'] = True
-    time.sleep(0.3)
+        app._shutdown_app(reason='gate-quit')
+    else:
+        app._shutdown_app(reason='gate-quit-no-tray')
+    time.sleep(0.5)
+    CHECKS['quit'] = tray_mod.get_active_tray() is None
+    if not CHECKS['quit']:
+        _fail('shutdown did not clear active tray singleton')
+    CHECKS['singleton'] = CHECKS['quit']
     _pass_all()
 
 

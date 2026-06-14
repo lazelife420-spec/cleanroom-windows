@@ -414,6 +414,8 @@ class StartupManagerGUI(ctk.CTk):
         self._launch_done = False
         self._launch_logo = None
         self._tray = None
+        self._tray_watch_ids: list[str] = []
+        self._shutting_down = False
         self._initial_tab = initial_tab
         self._tab_loaded = {0}
         self._scan_session_done = False
@@ -432,6 +434,8 @@ class StartupManagerGUI(ctk.CTk):
         self._brand_phase = None
         self._settings_dirty = False
         self.protocol('WM_DELETE_WINDOW', self._on_window_close)
+        global _APP_INSTANCE
+        _APP_INSTANCE = self
         self.after(50, self._poll_bg_queue)
 
         self.create_widgets()
@@ -805,34 +809,78 @@ class StartupManagerGUI(ctk.CTk):
             except Exception:
                 pass
 
+    def _cancel_tray_watches(self):
+        for jid in list(getattr(self, '_tray_watch_ids', []) or []):
+            try:
+                self.after_cancel(jid)
+            except Exception:
+                pass
+        self._tray_watch_ids = []
+
+    def _schedule_tray_health(self, seconds: int):
+        jid = self.after(seconds * 1000, lambda s=seconds: self._watch_tray_health(s))
+        self._tray_watch_ids.append(jid)
+
     def _init_tray(self, attempt: int = 0):
+        if getattr(self, '_shutting_down', False):
+            return
+        from ui.tray import TrayController, get_active_tray
+
+        existing = get_active_tray()
+        if existing is not None and existing.check_health():
+            self._tray = existing
+            logger.info('Tray already active — reusing controller=%s', id(existing))
+            return
+
+        prior = getattr(self, '_tray', None)
+        if prior is not None and prior is not existing:
+            try:
+                prior.stop()
+            except Exception:
+                logger.debug('Prior tray stop before re-init raised', exc_info=True)
+            self._tray = None
+
         try:
-            from ui.tray import TrayController
-            self._tray = TrayController(self)
+            if self._tray is None:
+                self._tray = TrayController(self)
             if not self._tray.start():
                 err = self._tray.last_error or 'Tray icon could not start'
                 diag = self._tray.diagnostics_text() if hasattr(self._tray, 'diagnostics_text') else err
+                try:
+                    self._tray.stop()
+                except Exception:
+                    pass
                 self._tray = None
-                if attempt < 2:
+                if attempt < 2 and not getattr(self, '_shutting_down', False):
                     logger.warning('Tray start retry %s: %s', attempt + 1, err)
                     self.after(1500, lambda: self._init_tray(attempt + 1))
                     return
                 self._show_tray_unavailable(diag)
                 return
             logger.info('Tray icon active')
-            self.after(1000, lambda: self._watch_tray_health(1))
-            self.after(3000, lambda: self._watch_tray_health(3))
-            self.after(5000, lambda: self._watch_tray_health(5))
+            self._schedule_tray_health(1)
+            self._schedule_tray_health(3)
+            self._schedule_tray_health(5)
         except Exception as exc:
             self._tray = None
-            if attempt < 2:
+            if attempt < 2 and not getattr(self, '_shutting_down', False):
                 logger.warning('Tray init retry %s: %s', attempt + 1, exc)
                 self.after(1500, lambda: self._init_tray(attempt + 1))
                 return
             self._show_tray_unavailable(str(exc))
             logger.exception('Tray init failed')
 
+    def _on_tray_thread_exit(self, tray):
+        if getattr(self, '_shutting_down', False):
+            return
+        err = tray.diagnostics_text() if hasattr(tray, 'diagnostics_text') else tray.last_error
+        logger.error('Tray thread exit surfaced to app: %s', err)
+        self._tray = None
+        self._show_tray_unavailable(err or 'Tray icon stopped unexpectedly.')
+
     def _watch_tray_health(self, seconds: int):
+        if getattr(self, '_shutting_down', False):
+            return
         tray = getattr(self, '_tray', None)
         if tray is None:
             return
@@ -848,12 +896,39 @@ class StartupManagerGUI(ctk.CTk):
         self._tray = None
         self._show_tray_unavailable(err)
 
-    def _on_window_close(self):
+    def _shutdown_app(self, *_args, reason: str = 'quit'):
+        """Single shutdown path — tray menu Quit, window close, tests, theme prep."""
+        if getattr(self, '_shutting_down', False):
+            return
+        self._shutting_down = True
+        logger.info('Cleanroom shutdown requested (%s)', reason)
+        self._cancel_tray_watches()
         tray = getattr(self, '_tray', None)
-        if tray:
-            tray.stop()
+        if tray is not None:
+            try:
+                tray.stop()
+            except Exception:
+                logger.exception('Tray stop during shutdown')
             self._tray = None
-        self.destroy()
+        from ui.tray import shutdown_all_trays
+        shutdown_all_trays()
+        global _APP_INSTANCE
+        if _APP_INSTANCE is self:
+            _APP_INSTANCE = None
+        try:
+            self.quit()
+        except Exception:
+            pass
+        try:
+            self.destroy()
+        except Exception:
+            pass
+
+    def _on_window_close(self):
+        if getattr(self, '_tray', None) and self._tray.check_health():
+            self._shutdown_app(reason='window-close')
+        else:
+            self._shutdown_app(reason='window-close-no-tray')
 
     def _tray_show_window(self):
         self.deiconify()
@@ -864,18 +939,14 @@ class StartupManagerGUI(ctk.CTk):
             pass
 
     def _tray_hide_window(self):
-        self.withdraw()
+        tray = getattr(self, '_tray', None)
+        if tray is not None and tray.check_health():
+            self.withdraw()
+        else:
+            self._set_status('Tray unavailable — keeping main window visible.')
 
     def _tray_quit(self):
-        tray = getattr(self, '_tray', None)
-        if tray:
-            tray.stop()
-            self._tray = None
-        try:
-            self.quit()
-        except Exception:
-            pass
-        self.destroy()
+        self._shutdown_app(reason='tray-quit')
 
     def _fade_in_window(self, step=0, steps=12):
         try:
@@ -1618,7 +1689,18 @@ class StartupManagerGUI(ctk.CTk):
         prefs['theme'] = name
         save_ui_prefs(prefs)
         apply_palette(name)
+        self._cancel_tray_watches()
+        tray = getattr(self, '_tray', None)
+        if tray is not None:
+            try:
+                tray.stop()
+            except Exception:
+                logger.debug('Tray stop before theme restart raised', exc_info=True)
+            self._tray = None
+        from ui.tray import shutdown_all_trays
+        shutdown_all_trays()
         self.wants_restart = True
+        self._shutting_down = True
         self.destroy()
 
     def cycle_theme(self):
@@ -8319,8 +8401,32 @@ class ToolTip:
                 pass
 
 
+def _focus_existing_cleanroom_window() -> bool:
+    """Try to raise an already-running Cleanroom window."""
+    if sys.platform != 'win32':
+        return False
+    try:
+        import ctypes
+        user32 = ctypes.windll.user32
+        hwnd = user32.FindWindowW(None, brand.APP_DISPLAY)
+        if not hwnd:
+            return False
+        SW_RESTORE = 9
+        user32.ShowWindow(hwnd, SW_RESTORE)
+        user32.SetForegroundWindow(hwnd)
+        return True
+    except Exception:
+        logger.debug('Focus existing Cleanroom window failed', exc_info=True)
+        return False
+
+
+_APP_INSTANCE = None
+_SINGLE_INSTANCE_MUTEX = None
+
+
 def _acquire_single_instance():
     """Prevent duplicate GUI processes (and tray icon piles) on Windows."""
+    global _SINGLE_INSTANCE_MUTEX
     if sys.platform != 'win32':
         return True
     try:
@@ -8328,16 +8434,20 @@ def _acquire_single_instance():
         ERROR_ALREADY_EXISTS = 183
         mutex = ctypes.windll.kernel32.CreateMutexW(
             None, True, 'Local\\CleanroomWindowsSingleInstance')
+        _SINGLE_INSTANCE_MUTEX = mutex
         if ctypes.windll.kernel32.GetLastError() == ERROR_ALREADY_EXISTS:
+            focused = _focus_existing_cleanroom_window()
             try:
+                msg = ('Cleanroom is already running.\n'
+                       'Brought the existing window forward.'
+                       if focused else
+                       'Cleanroom is already running.\n'
+                       'Check the system tray or taskbar.')
                 ctypes.windll.user32.MessageBoxW(
-                    0,
-                    'Cleanroom is already running.\nCheck the system tray or taskbar.',
-                    'Cleanroom',
-                    0x40,
-                )
+                    0, msg, brand.APP_DISPLAY, 0x40)
             except Exception:
                 pass
+            logger.info('Second Cleanroom launch blocked (focused=%s)', focused)
             return False
         return True
     except Exception:
@@ -8438,3 +8548,6 @@ if __name__ == '__main__':
         app.mainloop()
         if not getattr(app, 'wants_restart', False):
             break
+    from ui.tray import shutdown_all_trays
+    shutdown_all_trays()
+    sys.exit(0)

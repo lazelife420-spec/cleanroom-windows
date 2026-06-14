@@ -151,14 +151,12 @@ def sandbox(tmp_path, monkeypatch):
         }
     finally:
         try:
-            tray = getattr(app, '_tray', None)
-            if tray:
-                tray.stop()
-                app._tray = None
-        except Exception:
-            pass
-        try:
-            app.destroy()
+            if hasattr(app, '_shutdown_app'):
+                app._shutdown_app(reason='test-teardown')
+            else:
+                from ui.tray import shutdown_all_trays
+                shutdown_all_trays()
+                app.destroy()
         except Exception:
             pass
 

@@ -18,11 +18,20 @@ python scripts/generate_icons.py   # only if regenerating from SVG
 python startup_manager_gui.py
 ```
 
-Optional automated tray lifecycle check (does not replace visual confirmation of notification-area icon):
+Optional automated tray lifecycle checks (do not replace visual confirmation of notification-area icon):
 
 ```powershell
 python scripts/tray_visual_gate.py
+python scripts/tray_process_gate.py
 ```
+
+After Quit from tray or window close, confirm no Cleanroom Python process remains:
+
+```powershell
+Get-Process python,pythonw,Cleanroom -ErrorAction SilentlyContinue
+```
+
+Expected: no leftover Cleanroom `python` process and no tray icon.
 
 ## Icon pipeline (premium product identity)
 
@@ -104,14 +113,18 @@ On **Cleaner, Archive, Proof Ledger, Startup, Uninstaller, Restore**:
 
 **PASS requires:**
 
+- Launch from source: `python startup_manager_gui.py`
 - Cleanroom icon visible beside clock **or** inside hidden-icons overflow
+- Exactly **one** tray icon (no duplicate pile)
 - Right-click opens menu (Open, Scan, receipt/proof actions, Tools, Window, Quit)
 - **Hide to tray** withdraws main window; **Show** / **Open** restores it
 - **Quit** removes tray icon cleanly
+- **Quit** terminates the Cleanroom `python` process (verify with `Get-Process python,pythonw,Cleanroom`)
 - Relaunch creates **exactly one** icon (no duplicate pile)
-- Second instance does not spawn duplicate tray icons
+- Second instance while running does not spawn duplicate tray icons or hidden processes
 - No `_running` / pystray traceback on quit
 - Menu actions (Latest Receipt, Proof Pack, etc.) do not crash
+- Automated tray gates leave no orphan icons/processes (`tray_visual_gate.py`, `tray_process_gate.py`)
 
 **FAIL if:**
 
@@ -119,15 +132,21 @@ On **Cleaner, Archive, Proof Ledger, Startup, Uninstaller, Restore**:
 - Icon is not visible anywhere in the notification area / overflow
 - Menu cannot open
 - Quit leaves orphan icon
-- Relaunch creates duplicate icons
+- Quit leaves orphan `python` / `pythonw` / `Cleanroom` process
+- Relaunch creates duplicate icons or processes
+- User cannot close the tray/app from the tray menu
+- Tray tests or gate scripts leave icons/processes behind
 
 Manual checklist:
 
+- [ ] Launch from source (`python startup_manager_gui.py`)
 - [ ] Tray icon **visible** after launch (not flash-then-gone)
 - [ ] Right-click opens full product menu
 - [ ] **Hide to tray** / **Show** work
 - [ ] **Quit** removes icon
+- [ ] **Quit** exits Python process (`Get-Process python,pythonw,Cleanroom` empty)
 - [ ] Relaunch = one icon only
+- [ ] Second launch while running focuses existing app or exits cleanly (no duplicate tray)
 - [ ] No pystray traceback in console
 
 ## Dialogs

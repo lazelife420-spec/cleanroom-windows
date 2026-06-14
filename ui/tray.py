@@ -12,8 +12,25 @@ import brand
 
 logger = logging.getLogger(__name__)
 
-_active_tray = None
+_active_tray: 'TrayController | None' = None
 _keepalive: list = []
+_start_lock = threading.Lock()
+
+
+def get_active_tray() -> 'TrayController | None':
+    return _active_tray
+
+
+def shutdown_all_trays() -> None:
+    """Stop any live tray controller — used by app/test teardown."""
+    global _active_tray
+    tray = _active_tray
+    if tray is not None:
+        try:
+            tray.stop()
+        except Exception:
+            logger.exception('shutdown_all_trays failed')
+    _active_tray = None
 
 
 def _resource_path(name):
@@ -126,8 +143,10 @@ class TrayController:
         self._tray_image = None
         self._tray_menu = None
         self._tray_thread = None
+        self._monitor_thread = None
         self._ready = threading.Event()
         self._stopping = False
+        self._started = False
         self.last_error = ''
         self.diagnostics: dict = {}
         self._icon_asset_path = ''
@@ -141,7 +160,7 @@ class TrayController:
         if self._stopping:
             return False
         icon = self._icon
-        if icon is None:
+        if icon is None or not self._started:
             return False
         thread = self._tray_thread
         if thread is not None and not thread.is_alive():
@@ -164,11 +183,14 @@ class TrayController:
         self.diagnostics = {
             'tray_enabled': True,
             'pystray_import': 'ok',
+            'pid': os.getpid(),
             'icon_asset_path': self._icon_asset_path or '(fallback)',
             'fallback_icon': self._used_fallback_image,
             'tray_object_id': id(self),
             'icon_object_id': id(icon) if icon else None,
             'active_tray_stored': _active_tray is self,
+            'started': self._started,
+            'stopping': self._stopping,
             'thread_name': thread.name if thread else None,
             'thread_id': thread.ident if thread else None,
             'thread_alive': thread.is_alive() if thread else False,
@@ -184,7 +206,14 @@ class TrayController:
 
     def start(self) -> bool:
         global _active_tray
+        with _start_lock:
+            return self._start_locked()
+
+    def _start_locked(self) -> bool:
+        global _active_tray
         self.last_error = ''
+        logger.info('Tray start requested (controller=%s pid=%s)', id(self), os.getpid())
+
         try:
             import pystray  # noqa: F401
         except ImportError as exc:
@@ -194,24 +223,36 @@ class TrayController:
             return False
 
         if _active_tray is not None and _active_tray is not self:
+            if _active_tray.check_health():
+                logger.info('Tray already running on controller=%s — reusing', id(_active_tray))
+                if hasattr(self._app, '_tray'):
+                    self._app._tray = _active_tray
+                return True
+            logger.info('Stopping stale tray controller=%s', id(_active_tray))
             try:
                 _active_tray.stop()
             except Exception:
-                logger.debug('Prior active tray stop raised', exc_info=True)
+                logger.debug('Stale tray stop raised', exc_info=True)
             _active_tray = None
 
-        if self._icon is not None and self.check_health():
+        if self._started and self.check_health():
+            logger.info('Tray already running on this controller=%s', id(self))
             _active_tray = self
-            self._pin_keepalive()
             return True
 
+        if self._icon is not None:
+            logger.info('Stopping prior icon on controller=%s before restart', id(self))
+            self.stop()
+
         self._stopping = False
+        self._started = False
         self._ready.clear()
         try:
             self._start_icon()
         except Exception as exc:
             self.last_error = str(exc)
             logger.exception('Tray failed to start')
+            self.stop()
             return False
 
         if not self._ready.wait(timeout=10.0):
@@ -220,9 +261,11 @@ class TrayController:
             self.stop()
             return False
 
+        self._started = True
         if not self.check_health():
             self.last_error = self.last_error or 'Tray icon not healthy after start'
             logger.error('Tray unhealthy immediately after start: %s', self.last_error)
+            self._started = False
             self.stop()
             return False
 
@@ -236,6 +279,14 @@ class TrayController:
         for obj in (self, self._icon, self._tray_image, self._tray_menu):
             if obj is not None and obj not in _keepalive:
                 _keepalive.append(obj)
+
+    def _unpin_keepalive(self) -> None:
+        global _keepalive
+        for obj in (self._tray_menu, self._tray_image, self._icon, self):
+            try:
+                _keepalive.remove(obj)
+            except ValueError:
+                pass
 
     def _start_icon(self):
         import pystray
@@ -257,14 +308,20 @@ class TrayController:
         )
         _ensure_icon_running_attr(icon)
         self._icon = icon
+        logger.info(
+            'Tray icon creating name=%s icon_id=%s asset=%s fallback=%s',
+            icon_name, id(icon), asset_path or 'none', used_fallback,
+        )
 
         def _setup(ic):
+            logger.info('Tray setup callback (icon_id=%s)', id(ic))
             try:
                 ic.visible = True
             except Exception as exc:
                 self.last_error = str(exc)
                 logger.exception('Tray setup failed to show icon')
 
+        logger.info('Tray calling run_detached (icon_id=%s)', id(icon))
         icon.run_detached(setup=_setup)
 
         deadline = time.time() + 10.0
@@ -277,9 +334,13 @@ class TrayController:
             raise RuntimeError(self.last_error)
 
         self._tray_thread = getattr(icon, '_thread', None)
+        if self._tray_thread is not None:
+            logger.info(
+                'Tray thread alive name=%s id=%s',
+                self._tray_thread.name, self._tray_thread.ident,
+            )
+        self._start_thread_monitor()
         self._ready.set()
-        logger.info('Tray icon started (%s) asset=%s fallback=%s',
-                    icon_name, asset_path or 'none', used_fallback)
 
         def _nudge():
             if self._icon is not None and not self._stopping:
@@ -291,12 +352,62 @@ class TrayController:
         threading.Timer(0.6, _nudge).start()
         threading.Timer(2.0, _nudge).start()
 
+    def _start_thread_monitor(self) -> None:
+        """Log unexpected tray thread exit and notify the app on the Tk thread."""
+        thread = self._tray_thread
+        if thread is None:
+            return
+
+        controller = self
+
+        def _watch():
+            try:
+                thread.join()
+            except Exception:
+                logger.debug('Tray monitor join failed', exc_info=True)
+            if controller._stopping:
+                logger.info('Tray thread exited after stop (controller=%s)', id(controller))
+                return
+            controller.last_error = 'Tray thread exited unexpectedly'
+            logger.error(
+                'Tray thread exited while still active (controller=%s): %s',
+                id(controller), controller.last_error,
+            )
+            controller._started = False
+            try:
+                controller._schedule_app(lambda: controller._notify_thread_exit())
+            except Exception:
+                pass
+
+        self._monitor_thread = threading.Thread(
+            target=_watch, name='cleanroom-tray-monitor', daemon=True)
+        self._monitor_thread.start()
+
+    def _schedule_app(self, fn):
+        try:
+            self._app.after(0, fn)
+        except Exception:
+            logger.debug('Tray app schedule failed (app may be shutting down)', exc_info=True)
+
+    def _notify_thread_exit(self):
+        if getattr(self._app, '_shutting_down', False):
+            return
+        if hasattr(self._app, '_on_tray_thread_exit'):
+            self._app._on_tray_thread_exit(self)
+
     def stop(self):
         global _active_tray
+        if self._stopping and self._icon is None and not self._started:
+            return
+
+        logger.info('Tray stop requested (controller=%s pid=%s)', id(self), os.getpid())
         self._stopping = True
+        self._started = False
         icon = self._icon
+        thread = self._tray_thread or (getattr(icon, '_thread', None) if icon else None)
         self._icon = None
         self._ready.clear()
+
         if icon is not None:
             _ensure_icon_running_attr(icon)
             try:
@@ -304,19 +415,29 @@ class TrayController:
             except Exception:
                 pass
             try:
+                logger.info('Tray icon.stop() (icon_id=%s)', id(icon))
                 icon.stop()
             except AttributeError:
                 logger.debug('Tray icon stop — missing _running (patched)', exc_info=True)
             except Exception:
-                logger.debug('Tray icon stop raised', exc_info=True)
+                logger.exception('Tray icon stop raised')
             finally:
                 try:
                     icon._running = False
                 except Exception:
                     pass
+
+        if thread is not None and thread.is_alive() and thread is not threading.current_thread():
+            logger.info('Tray joining thread id=%s', thread.ident)
+            thread.join(timeout=5.0)
+            if thread.is_alive():
+                self.last_error = 'Tray thread did not exit within 5s'
+                logger.error('Tray thread join timeout (id=%s)', thread.ident)
+
         self._tray_thread = None
         if _active_tray is self:
             _active_tray = None
+        self._unpin_keepalive()
         self._log_diagnostics('stopped')
 
     def refresh_tooltip(self):
@@ -335,15 +456,9 @@ class TrayController:
                 logger.debug('Tray tooltip refresh failed', exc_info=True)
 
     def _safe_tooltip_text(self) -> str:
-        """Tooltip text safe to read from any thread — no Tk widget access."""
         return f'{brand.APP_DISPLAY} — Archive-first ON'
 
     def _build_menu(self):
-        """Build tray menu with static labels only.
-
-        pystray evaluates menu descriptors on the tray thread during update_menu.
-        Never touch Tk widgets or call into the app from here.
-        """
         from pystray import Menu, MenuItem as item
 
         return Menu(
@@ -372,10 +487,9 @@ class TrayController:
         )
 
     def _schedule(self, fn):
-        try:
-            self._app.after(0, fn)
-        except Exception:
-            logger.debug('Tray callback schedule failed', exc_info=True)
+        if self._stopping:
+            return
+        self._schedule_app(fn)
 
     def _on_open(self, icon, item):
         self._schedule(self._app._tray_show_window)
@@ -437,4 +551,4 @@ class TrayController:
         self._schedule(_go)
 
     def _on_quit(self, icon, item):
-        self._schedule(self._app._tray_quit)
+        self._schedule(self._app._shutdown_app)
