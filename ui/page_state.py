@@ -3,28 +3,72 @@ from __future__ import annotations
 
 IDLE_READY = 'idle_ready'
 LOADING = 'loading'
+SCAN_STOPPED = 'scan_stopped'
 EMPTY_DONE = 'empty_done'
 RESULTS_READY = 'results_ready'
 RECEIPT_READY = 'receipt_ready'
 ERROR = 'error'
 
 
+def _fmt_elapsed(seconds: float) -> str:
+    seconds = max(0, int(seconds or 0))
+    m, s = divmod(seconds, 60)
+    if m:
+        return f'{m}m {s}s'
+    return f'{s}s'
+
+
+def _scan_subtitle(progress: dict | None) -> str:
+    prog = progress or {}
+    folder = (prog.get('current_folder') or '').strip()
+    if folder:
+        return f'Scanning: {folder}'
+    return 'Reviewing configured folders for candidates.'
+
+
+def _scan_footer(progress: dict | None) -> str:
+    prog = progress or {}
+    files = int(prog.get('files_checked', 0) or 0)
+    folders = int(prog.get('folders_scanned', 0) or 0)
+    cands = int(prog.get('candidates_found', 0) or 0)
+    elapsed = _fmt_elapsed(prog.get('elapsed_s', 0))
+    size = prog.get('reclaimable_label') or ''
+    parts = [f'Scanning… {files:,} files checked']
+    if folders:
+        parts.append(f'{folders} folder(s)')
+    if cands:
+        parts.append(f'{cands} candidate(s)')
+    if size:
+        parts.append(size)
+    parts.append(elapsed)
+    return ' · '.join(parts)
+
+
 def cleaner_page_state(
     *,
     loading: bool = False,
+    stopped: bool = False,
     error: str = '',
     count: int = 0,
     checked: int = 0,
     scan_done: bool = False,
     cached_count: int = 0,
+    progress: dict | None = None,
 ) -> tuple[str, str, str, str]:
     """Return (state, hero_title, hero_subtitle, footer_status)."""
     if loading:
         return (
             LOADING,
             'Scanning…',
-            'Reviewing configured folders for candidates.',
-            'Scanning configured folders…',
+            _scan_subtitle(progress),
+            _scan_footer(progress),
+        )
+    if stopped:
+        return (
+            SCAN_STOPPED,
+            'Scan stopped',
+            'Scan cancelled — no cleanup was performed.',
+            'Scan stopped — no cleanup was performed.',
         )
     if error:
         short = error if len(error) < 80 else error[:77] + '…'
@@ -69,6 +113,7 @@ def cleaner_page_state(
 def home_page_state(
     *,
     loading: bool = False,
+    stopped: bool = False,
     error: str = '',
     count: int = 0,
     checked: int = 0,
@@ -76,14 +121,22 @@ def home_page_state(
     custody_missing: int = 0,
     cached_count: int = 0,
     phase: str | None = None,
+    progress: dict | None = None,
 ) -> tuple[str, str, str, str]:
     """Return (state, hero_title, hero_subtitle, status_line)."""
     if loading:
         return (
             LOADING,
             'Scanning…',
-            'Reviewing configured folders for cleanup candidates.',
-            'Scanning configured folders…',
+            _scan_subtitle(progress),
+            _scan_footer(progress),
+        )
+    if stopped:
+        return (
+            SCAN_STOPPED,
+            'Scan stopped',
+            'Scan cancelled — no cleanup was performed.',
+            'Scan stopped — no cleanup was performed.',
         )
     if error:
         short = error if len(error) < 80 else error[:77] + '…'

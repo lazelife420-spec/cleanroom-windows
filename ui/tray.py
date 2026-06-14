@@ -121,6 +121,7 @@ class TrayController:
     MENU_LABELS = (
         'Open Cleanroom',
         'Run Scan',
+        'Stop Scan',
         'Preview Latest Receipt',
         'Open Latest Receipt',
         'Open Proof Pack',
@@ -458,6 +459,34 @@ class TrayController:
     def _safe_tooltip_text(self) -> str:
         return f'{brand.APP_DISPLAY} — Archive-first ON'
 
+    def refresh_menu(self):
+        icon = self._icon
+        if icon is None or self._stopping:
+            return
+        try:
+            menu = self._build_menu()
+            self._tray_menu = menu
+            icon.menu = menu
+            if hasattr(icon, 'update_menu'):
+                icon.update_menu()
+        except Exception:
+            logger.debug('Tray menu refresh failed', exc_info=True)
+
+    def _scan_running(self) -> bool:
+        return bool(getattr(self._app, '_cleaner_loading', False))
+
+    def _run_scan_label(self, _item=None) -> str:
+        return 'Scanning…' if self._scan_running() else 'Run Scan'
+
+    def _run_scan_enabled(self, _item) -> bool:
+        return not self._scan_running()
+
+    def _stop_scan_visible(self, _item) -> bool:
+        return self._scan_running()
+
+    def _stop_scan_enabled(self, _item) -> bool:
+        return self._scan_running()
+
     def _build_menu(self):
         from pystray import Menu, MenuItem as item
 
@@ -465,7 +494,9 @@ class TrayController:
             item(f'{brand.APP_DISPLAY} — archive-first', None, enabled=False),
             Menu.SEPARATOR,
             item('Open Cleanroom', self._on_open),
-            item('Run Scan', self._on_run_scan),
+            item(self._run_scan_label, self._on_run_scan, enabled=self._run_scan_enabled),
+            item('Stop Scan', self._on_stop_scan,
+                 visible=self._stop_scan_visible, enabled=self._stop_scan_enabled),
             item('Preview Latest Receipt', self._on_preview_receipt),
             item('Open Latest Receipt', self._on_latest_receipt),
             item('Open Proof Pack', self._on_proof_pack),
@@ -505,6 +536,24 @@ class TrayController:
             if getattr(self._app, '_cleaner_loading', False):
                 return
             self._app.refresh_cleanup()
+
+        self._schedule(_go)
+
+    def _on_stop_scan(self, icon, item):
+        def _go():
+            if hasattr(self._app, 'stop_scan'):
+                self._app.stop_scan()
+
+        self._schedule(_go)
+
+    def _on_quit(self, icon, item):
+        def _go():
+            if getattr(self._app, '_cleaner_loading', False):
+                if hasattr(self._app, 'stop_scan'):
+                    self._app.stop_scan()
+                self._app._pending_shutdown = True
+                return
+            self._app._shutdown_app(reason='tray-quit')
 
         self._schedule(_go)
 
@@ -549,6 +598,3 @@ class TrayController:
                 self._app._tray_show_window()
 
         self._schedule(_go)
-
-    def _on_quit(self, icon, item):
-        self._schedule(self._app._shutdown_app)

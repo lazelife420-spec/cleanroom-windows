@@ -31,6 +31,7 @@ from ui.page_state import (
     LOADING,
     RECEIPT_READY,
     RESULTS_READY,
+    SCAN_STOPPED,
     cleaner_page_state,
     home_page_state,
 )
@@ -61,6 +62,7 @@ import threading
 import subprocess
 import sys
 import shutil
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -421,6 +423,13 @@ class StartupManagerGUI(ctk.CTk):
         self._scan_session_done = False
         self._cleaner_loading = False
         self._cleaner_error = ''
+        self._scan_stopped = False
+        self._scan_cancel_event = threading.Event()
+        self._scan_progress: dict = {}
+        self._scan_progress_job = None
+        self._scan_diag: dict = {}
+        self._pending_shutdown = False
+        self._scan_worker_id = 0
         self._selected_rec_idx = None
         self._sidebar_collapsed = bool(load_ui_prefs().get('sidebar_collapsed', False))
         self._cached_scan_count = 0
@@ -640,7 +649,9 @@ class StartupManagerGUI(ctk.CTk):
         return bool(getattr(self, '_cleaner_loading', False))
 
     def _scan_display_metrics(self):
-        """Counts for Home/Cleaner hero — includes persisted last_scan when session not loaded."""
+        """Counts for Home/Cleaner hero — never show stale cache while scanning."""
+        if getattr(self, '_cleaner_loading', False) or getattr(self, '_scan_stopped', False):
+            return 0, 0, False
         items = self.cleanup_items or []
         session = getattr(self, '_scan_session_done', False)
         if session:
@@ -650,17 +661,27 @@ class StartupManagerGUI(ctk.CTk):
             return cached, 0, False
         return 0, 0, session
 
+    def _refresh_tray_menu(self):
+        tray = getattr(self, '_tray', None)
+        if tray is not None and hasattr(tray, 'refresh_menu'):
+            try:
+                tray.refresh_menu()
+            except Exception:
+                pass
+
     def _sync_cleaner_state(self):
         """Single source of truth for Cleaner hero, footer, and empty layout."""
         count, checked, scan_done = self._scan_display_metrics()
         cached = int(getattr(self, '_cached_scan_count', 0) or 0)
         state, hero, sub, footer = cleaner_page_state(
             loading=self._cleaner_loading,
+            stopped=getattr(self, '_scan_stopped', False),
             error=self._cleaner_error,
             count=count if scan_done else 0,
             checked=checked,
             scan_done=scan_done,
-            cached_count=0 if scan_done else cached,
+            cached_count=0 if scan_done or self._cleaner_loading else cached,
+            progress=getattr(self, '_scan_progress', None),
         )
         self._cleaner_page_state = state
         if hasattr(self, 'cleanup_status_hero'):
@@ -680,25 +701,38 @@ class StartupManagerGUI(ctk.CTk):
             on_cleaner = self.tab_control.index('current') == 3
         except Exception:
             on_cleaner = False
-        if on_cleaner:
+        if on_cleaner or self._cleaner_loading:
             self._set_status(footer)
         if hasattr(self, 'apply_clean_btn'):
             self.apply_clean_btn.configure(
                 style='Primary.TButton' if state == RECEIPT_READY else 'Action.TButton')
         count = len(self.cleanup_items or [])
-        show_actions = count > 0 and state != LOADING
+        show_actions = count > 0 and state not in (LOADING, SCAN_STOPPED)
         for attr in ('cleaner_preview_btn', 'apply_clean_btn'):
             if hasattr(self, attr):
                 getattr(self, attr).config(state='normal' if show_actions else 'disabled')
         scanning = state == LOADING
+        if hasattr(self, 'scan_btn'):
+            self.scan_btn.config(
+                state='disabled' if scanning else 'normal',
+                text='Scanning…' if scanning else 'Scan Now',
+            )
+        if hasattr(self, 'stop_scan_btn'):
+            if scanning:
+                self.stop_scan_btn.pack(side='left', padx=(8, 0))
+            else:
+                self.stop_scan_btn.pack_forget()
         for attr in ('scan_btn', 'dashboard_primary_btn'):
-            if hasattr(self, attr):
+            if hasattr(self, attr) and attr != 'scan_btn':
                 getattr(self, attr).config(state='disabled' if scanning else 'normal')
         if hasattr(self, 'tb_scan'):
             self.tb_scan.configure(state='disabled' if scanning else 'normal')
         if hasattr(self, '_update_cleanup_empty_state'):
             self._update_cleanup_empty_state()
+        if scanning:
+            self._sync_scan_progress_ui()
         self._update_brand_identity()
+        self._refresh_tray_menu()
 
     def _sync_home_state(self, *, custody_missing: int = 0):
         """Align Home hero with the same scan lifecycle as Cleaner."""
@@ -706,13 +740,15 @@ class StartupManagerGUI(ctk.CTk):
         cached = int(getattr(self, '_cached_scan_count', 0) or 0)
         state, hero, sub, status = home_page_state(
             loading=self._cleaner_loading,
+            stopped=getattr(self, '_scan_stopped', False),
             error=self._cleaner_error,
             count=count if scan_done else 0,
             checked=checked,
             scan_done=scan_done,
             custody_missing=custody_missing,
-            cached_count=0 if scan_done else cached,
+            cached_count=0 if scan_done or self._cleaner_loading else cached,
             phase=getattr(self, '_brand_phase', None),
+            progress=getattr(self, '_scan_progress', None),
         )
         self._home_page_state = state
         if state == ERROR:
@@ -733,7 +769,7 @@ class StartupManagerGUI(ctk.CTk):
             on_home = self.tab_control.index('current') == 0
         except Exception:
             on_home = False
-        if on_home and not self._cleaner_loading:
+        if on_home or self._cleaner_loading:
             self._set_status(status)
         if state == RECEIPT_READY and hasattr(self, 'dashboard_primary_btn'):
             self.dashboard_primary_btn.configure(
@@ -784,7 +820,10 @@ class StartupManagerGUI(ctk.CTk):
             for attr in ('dashboard_preview_btn', 'dashboard_archive_btn', 'dashboard_primary_btn'):
                 if hasattr(self, attr):
                     getattr(self, attr).config(state='disabled')
+            if hasattr(self, 'dashboard_primary_btn'):
+                self.dashboard_primary_btn.configure(text='Scanning…')
         self.preview_receipt_btn = getattr(self, 'dashboard_primary_btn', None)
+        self._update_brand_identity()
 
     def _toggle_sidebar_collapsed(self):
         self._sidebar_collapsed = not self._sidebar_collapsed
@@ -898,6 +937,10 @@ class StartupManagerGUI(ctk.CTk):
 
     def _shutdown_app(self, *_args, reason: str = 'quit'):
         """Single shutdown path — tray menu Quit, window close, tests, theme prep."""
+        if getattr(self, '_cleaner_loading', False):
+            self.stop_scan()
+            self._pending_shutdown = True
+            return
         if getattr(self, '_shutting_down', False):
             return
         self._shutting_down = True
@@ -1428,8 +1471,9 @@ class StartupManagerGUI(ctk.CTk):
             loading_panel=getattr(self, '_cleanup_loading_panel', None),
         )
         empty = not self.cleanup_items and not getattr(self, '_cleaner_loading', False)
+        loading = getattr(self, '_cleaner_loading', False)
         if hasattr(self, '_cleanup_chips'):
-            if empty:
+            if empty or loading:
                 self._cleanup_chips.grid_remove()
                 self._cleanup_tools.grid_remove()
             else:
@@ -1581,12 +1625,26 @@ class StartupManagerGUI(ctk.CTk):
         count = len(getattr(self, 'cleanup_items', []) or [])
         checked = len(getattr(self, 'cleanup_selected', set()) or set())
         phase = getattr(self, '_brand_phase', None)
+        scan_prog = getattr(self, '_scan_progress', None) or {}
+
+        if self._cleaner_loading:
+            files = int(scan_prog.get('files_checked', 0) or 0)
+            cands = int(scan_prog.get('candidates_found', 0) or 0)
+            scan_status = f'Scanning · {files:,} checked'
+            if cands:
+                scan_status += f' · {cands} candidate(s)'
+        elif getattr(self, '_scan_stopped', False):
+            scan_status = 'Scan stopped'
+        else:
+            scan_status = ''
 
         if tab_idx == 0:
             title = brand.APP_DISPLAY
             show_tagline = True
             title_accent = True
-            if count and checked:
+            if scan_status:
+                status = scan_status
+            elif count and checked:
                 status = 'Receipt ready · archive-first cleanup unlocked'
             elif count:
                 status = (f'{count:,} candidates found · '
@@ -1620,8 +1678,8 @@ class StartupManagerGUI(ctk.CTk):
                       if visible else 'Programs that launch with Windows')
         elif tab_idx == 3:
             title = 'Cleaner'
-            if self._cleaner_loading:
-                status = 'Scanning configured folders…'
+            if scan_status:
+                status = scan_status
             elif count:
                 status = f'{count:,} candidates · {checked} checked for archive'
             elif getattr(self, '_scan_session_done', False):
@@ -1677,6 +1735,7 @@ class StartupManagerGUI(ctk.CTk):
     def _update_brand_identity(self, tab_idx=None):
         """Refresh tray tooltip from app state — page identity lives in content, not chrome."""
         self._refresh_tray_tooltip()
+        self._refresh_tray_menu()
 
     def _navigate_to_tab(self, idx):
         self.tab_control.select(idx)
@@ -2965,6 +3024,8 @@ class StartupManagerGUI(ctk.CTk):
         self.scan_btn = ttk.Button(
             cta_row, text='Scan Now', style='Primary.TButton', command=self.refresh_cleanup)
         self.scan_btn.pack(side='left', ipadx=8, ipady=2)
+        self.stop_scan_btn = ttk.Button(
+            cta_row, text='Stop Scan', style='Action.TButton', command=self.stop_scan)
         self.cleaner_preview_btn = ttk.Button(
             cta_row, text='Preview Receipt', style='Action.TButton',
             command=self.preview_cleanup_receipt)
@@ -3112,10 +3173,33 @@ class StartupManagerGUI(ctk.CTk):
         ttk.Button(
             empty_inner, text='Scan Now', style='Primary.TButton', command=self.refresh_cleanup,
         ).pack(anchor='center')
-        self._cleanup_loading_panel = ttk.Label(
-            body, text='Scanning folders for cleanup candidates…',
-            style='Info.TLabel', font=('Segoe UI', 12), anchor='center',
-        )
+        self._cleanup_loading_panel = ctk_theme.frame(body, CARD_BG, corner_radius=12)
+        scan_inner = ttk.Frame(self._cleanup_loading_panel, style='Card.TFrame')
+        scan_inner.place(relx=0.5, rely=0.44, anchor='center')
+        self._scan_loading_title = ttk.Label(
+            scan_inner, text='Scanning…', font=('Segoe UI', 16, 'bold'), background=CARD_BG)
+        self._scan_loading_title.pack(anchor='center')
+        self._scan_loading_sub = ttk.Label(
+            scan_inner, text='Reviewing configured folders for candidates.',
+            style='Info.TLabel', wraplength=520, justify='center')
+        self._scan_loading_sub.pack(anchor='center', pady=(8, 12))
+        self._scan_loading_bar = ttk.Progressbar(scan_inner, mode='indeterminate', length=360)
+        self._scan_loading_bar.pack(anchor='center', pady=(0, 12))
+        counters = ttk.Frame(scan_inner, style='Card.TFrame')
+        counters.pack(anchor='center', pady=(0, 8))
+        self._scan_counter_folders = ttk.Label(counters, text='Folders: 0', style='Badge.TLabel')
+        self._scan_counter_folders.grid(row=0, column=0, padx=8)
+        self._scan_counter_files = ttk.Label(counters, text='Files checked: 0', style='Badge.TLabel')
+        self._scan_counter_files.grid(row=0, column=1, padx=8)
+        self._scan_counter_candidates = ttk.Label(counters, text='Candidates: 0', style='Badge.TLabel')
+        self._scan_counter_candidates.grid(row=0, column=2, padx=8)
+        self._scan_counter_size = ttk.Label(counters, text='Reclaimable: 0B', style='Badge.TLabel')
+        self._scan_counter_size.grid(row=1, column=0, padx=8, pady=(6, 0))
+        self._scan_counter_elapsed = ttk.Label(counters, text='Elapsed: 0s', style='Badge.TLabel')
+        self._scan_counter_elapsed.grid(row=1, column=1, padx=8, pady=(6, 0))
+        self._scan_loading_stop = ttk.Button(
+            scan_inner, text='Stop Scan', style='Action.TButton', command=self.stop_scan)
+        self._scan_loading_stop.pack(anchor='center', pady=(12, 0))
         self._update_cleanup_empty_state()
 
         status = ttk.Frame(self.cleanup_tab)
@@ -4921,7 +5005,12 @@ class StartupManagerGUI(ctk.CTk):
     def _poll_bg_queue(self):
         try:
             while True:
-                done, result, err = self._bg_queue.get_nowait()
+                item = self._bg_queue.get_nowait()
+                if isinstance(item, tuple) and len(item) == 3 and item[0] == 'scan_progress':
+                    _, progress, _ = item
+                    self._queue_scan_progress(progress)
+                    continue
+                done, result, err = item
                 try:
                     done(result, err)
                 except Exception:
@@ -5213,6 +5302,16 @@ class StartupManagerGUI(ctk.CTk):
     def get_tray_tooltip(self) -> str:
         """Live tray tooltip — proof state, not just app name."""
         try:
+            if getattr(self, '_cleaner_loading', False):
+                prog = getattr(self, '_scan_progress', None) or {}
+                files = int(prog.get('files_checked', 0) or 0)
+                cands = int(prog.get('candidates_found', 0) or 0)
+                tip = f'{brand.APP_DISPLAY} — Scanning · {files:,} checked'
+                if cands:
+                    tip += f' · {cands} candidate(s)'
+                return tip
+            if getattr(self, '_scan_stopped', False):
+                return f'{brand.APP_DISPLAY} — Scan stopped'
             state = self._compute_brand_state()
             pill = state.get('pill') or brand.APP_LOCKUP_PILL
             status = state.get('status') or ''
@@ -5506,11 +5605,73 @@ class StartupManagerGUI(ctk.CTk):
             messagebox.showerror('Cleanup config error', f'Unable to load cleanup config:\n{e}')
             return None
 
+    def _sync_scan_progress_ui(self):
+        prog = getattr(self, '_scan_progress', None) or {}
+        folder = (prog.get('current_folder') or '').strip()
+        sub = f'Scanning: {folder}' if folder else 'Reviewing configured folders for candidates.'
+        if hasattr(self, '_scan_loading_sub'):
+            self._scan_loading_sub.config(text=sub)
+        folders = int(prog.get('folders_scanned', 0) or 0)
+        files = int(prog.get('files_checked', 0) or 0)
+        cands = int(prog.get('candidates_found', 0) or 0)
+        size = prog.get('reclaimable_label') or self._format_size(prog.get('reclaimable_bytes', 0))
+        elapsed = int(prog.get('elapsed_s', 0) or 0)
+        m, s = divmod(elapsed, 60)
+        elapsed_txt = f'{m}m {s}s' if m else f'{s}s'
+        if hasattr(self, '_scan_counter_folders'):
+            self._scan_counter_folders.config(text=f'Folders: {folders}')
+            self._scan_counter_files.config(text=f'Files checked: {files:,}')
+            self._scan_counter_candidates.config(text=f'Candidates: {cands}')
+            self._scan_counter_size.config(text=f'Reclaimable: {size}')
+            self._scan_counter_elapsed.config(text=f'Elapsed: {elapsed_txt}')
+        if hasattr(self, '_scan_loading_bar'):
+            try:
+                if self._cleaner_loading:
+                    self._scan_loading_bar.start(12)
+                else:
+                    self._scan_loading_bar.stop()
+            except Exception:
+                pass
+
+    def _schedule_scan_progress_tick(self):
+        if not getattr(self, '_cleaner_loading', False):
+            self._scan_progress_job = None
+            return
+        self._sync_scan_progress_ui()
+        self._sync_cleaner_state()
+        self._sync_home_state()
+        self._scan_progress_job = self.after(400, self._schedule_scan_progress_tick)
+
+    def _queue_scan_progress(self, progress: dict):
+        self._scan_progress = dict(progress or {})
+        self._scan_diag.update(self._scan_progress)
+
+    def stop_scan(self):
+        if not getattr(self, '_cleaner_loading', False):
+            return
+        logger.info('Scan stop requested')
+        self._scan_cancel_event.set()
+        self._scan_diag['stop_requested'] = True
+        self._set_status('Stopping scan…')
+
     def refresh_cleanup(self):
+        if getattr(self, '_cleaner_loading', False):
+            logger.info('Scan already running — ignoring duplicate start')
+            return
         cfg = self._load_cleanup_config()
         if cfg is None:
             return
 
+        self._scan_worker_id += 1
+        worker_id = self._scan_worker_id
+        self._scan_cancel_event = threading.Event()
+        self._scan_progress = {}
+        self._scan_diag = {
+            'started_at': time.time(),
+            'configured_roots': list(cfg.get('paths') or []),
+            'exclude_patterns': list(cfg.get('exclude_patterns') or []),
+        }
+        self._scan_stopped = False
         self._cleaner_loading = True
         self._cleaner_error = ''
         self.tb_preview.configure(state='disabled')
@@ -5519,32 +5680,98 @@ class StartupManagerGUI(ctk.CTk):
         self.cleanup_progress.start(12)
         self._sync_cleaner_state()
         self._sync_home_state()
+        self._schedule_scan_progress_tick()
 
-        def done(items, err):
-            self._cleaner_loading = False
-            self.cleanup_progress.stop()
-            self.cleanup_progress.pack_forget()
-            self.tb_preview.configure(state='normal')
-            self.tb_apply.configure(state='normal')
-            if err is not None:
-                self._cleaner_error = str(err)
-                self._sync_cleaner_state()
-                self._sync_home_state()
-                self._update_context_panel()
+        def progress_cb(prog):
+            if worker_id != self._scan_worker_id:
                 return
-            self.cleanup_items = items
-            self.cleanup_selected = set(range(len(items)))
-            self.cleanup_total_size = sum(item.get('size', 0) for item in items)
+            self._bg_queue.put(('scan_progress', prog, None))
+
+        def work():
+            items = cleanup_main.scan_candidates(
+                cfg,
+                cancel_check=self._scan_cancel_event.is_set,
+                on_progress=progress_cb,
+            )
+            cancelled = self._scan_cancel_event.is_set()
+            return {'items': items, 'cancelled': cancelled, 'cfg': cfg}
+
+        def done(result, err):
+            if worker_id != self._scan_worker_id:
+                return
+            self._finish_scan_worker(result, err)
+
+        self._run_bg(work, done)
+
+    def _finish_scan_worker(self, result, err):
+        self._cleaner_loading = False
+        if self._scan_progress_job is not None:
+            try:
+                self.after_cancel(self._scan_progress_job)
+            except Exception:
+                pass
+            self._scan_progress_job = None
+        self.cleanup_progress.stop()
+        self.cleanup_progress.pack_forget()
+        self.tb_preview.configure(state='normal')
+        self.tb_apply.configure(state='normal')
+        try:
+            if hasattr(self, '_scan_loading_bar'):
+                self._scan_loading_bar.stop()
+        except Exception:
+            pass
+
+        cancelled = False
+        items = []
+        cfg = None
+        if isinstance(result, dict):
+            items = result.get('items') or []
+            cancelled = bool(result.get('cancelled'))
+            cfg = result.get('cfg')
+
+        self._scan_diag['worker_exit'] = 'cancelled' if cancelled else ('error' if err else 'completed')
+        self._scan_diag['stop_completed'] = cancelled
+        logger.info('Scan worker exit: %s', self._scan_diag.get('worker_exit'))
+
+        if err is not None and not cancelled:
+            self._cleaner_error = str(err)
+            self._scan_stopped = False
+            self._sync_cleaner_state()
+            self._sync_home_state()
+            self._update_context_panel()
+            self._maybe_finish_pending_shutdown()
+            return
+
+        if cancelled:
+            self._scan_stopped = True
+            self.cleanup_items = []
+            self.cleanup_selected = set()
+            self.cleanup_total_size = 0
+            self._sync_cleaner_state()
+            self._sync_home_state()
+            self._update_context_panel()
+            self._maybe_finish_pending_shutdown()
+            return
+
+        self._scan_stopped = False
+        self.cleanup_items = items
+        self.cleanup_selected = set(range(len(items)))
+        self.cleanup_total_size = sum(item.get('size', 0) for item in items)
+        if cfg is not None:
             self._last_cfg = cfg
             self._update_cleanup_summary(cfg)
-            self._update_cleanup_tree()
-            self._scan_session_done = True
-            self._save_scan_cache()
-            self._sync_cleaner_state()
-            self.refresh_dashboard()
-            self._update_context_panel()
+        self._update_cleanup_tree()
+        self._scan_session_done = True
+        self._save_scan_cache()
+        self._sync_cleaner_state()
+        self.refresh_dashboard()
+        self._update_context_panel()
+        self._maybe_finish_pending_shutdown()
 
-        self._run_bg(lambda: cleanup_main.scan_candidates(cfg), done)
+    def _maybe_finish_pending_shutdown(self):
+        if getattr(self, '_pending_shutdown', False):
+            self._pending_shutdown = False
+            self.after(50, lambda: self._shutdown_app(reason='tray-quit-after-scan-stop'))
 
     def _format_size(self, bytes_value):
         if cleanup_main:

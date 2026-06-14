@@ -2,11 +2,18 @@
 import argparse
 import fnmatch
 import json
+import logging
 import os
 import shutil
 import sys
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
+
+SCAN_PROGRESS_EVERY_FILES = 50
+SLOW_FOLDER_SECONDS = 30.0
 
 try:
     import yaml
@@ -129,23 +136,102 @@ def load_config(path):
 def is_older_than(p: Path, days: int):
     return datetime.fromtimestamp(p.stat().st_mtime) < (datetime.now() - timedelta(days=days))
 
-def scan_candidates(cfg):
-    candidates = []
-    paths = cfg.get('paths', [])
-    age_temp = cfg.get('age_days', {}).get('temp', 7)
-    age_installers = cfg.get('age_days', {}).get('installers', 30)
-    size_threshold = cfg.get('size_threshold_mb', 200) * 1024 * 1024
-    ext_archive = set(x.lower() for x in cfg.get('extensions_archive', []))
+def _path_is_under(path: Path, parent: Path) -> bool:
+    try:
+        path.resolve().relative_to(parent.resolve())
+        return True
+    except Exception:
+        return False
 
+
+def _scan_roots(cfg):
+    """Configured roots minus archive/custody dirs (not parent of log paths)."""
+    paths = cfg.get('paths', []) or []
     exclude_patterns = cfg.get('exclude_patterns', []) or []
-    whitelist = cfg.get('whitelist', []) or []
+    skip_roots: list[Path] = []
+    archive = cfg.get('archive_dir')
+    if archive:
+        skip_roots.append(Path(archive).expanduser())
+    try:
+        skip_roots.append(user_config_dir())
+    except Exception:
+        pass
+
+    roots: list[Path] = []
     for root in paths:
         rootp = Path(root).expanduser()
         if not rootp.exists():
             continue
         if _matches_patterns(str(rootp), exclude_patterns):
             continue
+        skip = False
+        for skip_root in skip_roots:
+            try:
+                if rootp.resolve() == skip_root.resolve() or _path_is_under(rootp, skip_root):
+                    skip = True
+                    break
+            except Exception:
+                continue
+        if not skip:
+            roots.append(rootp)
+    return roots
+
+
+def _emit_scan_progress(on_progress, state: dict) -> None:
+    if on_progress is None:
+        return
+    try:
+        on_progress(dict(state))
+    except Exception:
+        logger.debug('scan progress callback failed', exc_info=True)
+
+
+def scan_candidates(cfg, cancel_check=None, on_progress=None):
+    """Scan configured folders; optional cooperative cancel + chunked progress."""
+    candidates = []
+    age_temp = cfg.get('age_days', {}).get('temp', 7)
+    age_installers = cfg.get('age_days', {}).get('installers', 30)
+    size_threshold = cfg.get('size_threshold_mb', 200) * 1024 * 1024
+    ext_archive = set(x.lower() for x in cfg.get('extensions_archive', []))
+    exclude_patterns = cfg.get('exclude_patterns', []) or []
+    whitelist = cfg.get('whitelist', []) or []
+    roots = _scan_roots(cfg)
+    started = time.time()
+    folders_scanned = 0
+    files_checked = 0
+    files_since_emit = 0
+    cancelled = False
+
+    def snapshot(current_folder: str = '') -> dict:
+        reclaimable = sum(c.get('size', 0) for c in candidates)
+        return {
+            'started_at': started,
+            'elapsed_s': time.time() - started,
+            'folders_scanned': folders_scanned,
+            'files_checked': files_checked,
+            'candidates_found': len(candidates),
+            'reclaimable_bytes': reclaimable,
+            'reclaimable_label': human_size(reclaimable),
+            'current_folder': current_folder,
+            'configured_roots': [str(p) for p in roots],
+            'exclude_patterns': list(exclude_patterns),
+            'stop_requested': bool(cancel_check and cancel_check()),
+            'cancelled': cancelled,
+        }
+
+    _emit_scan_progress(on_progress, snapshot())
+
+    for rootp in roots:
+        if cancel_check and cancel_check():
+            cancelled = True
+            break
+        folders_scanned += 1
+        folder_started = time.time()
+        _emit_scan_progress(on_progress, snapshot(str(rootp)))
         for f in rootp.rglob('*'):
+            if cancel_check and cancel_check():
+                cancelled = True
+                break
             if not f.is_file():
                 continue
             path_str = str(f)
@@ -158,21 +244,32 @@ def scan_candidates(cfg):
                 size = f.stat().st_size
             except Exception:
                 continue
-            # zero-byte
+            files_checked += 1
+            files_since_emit += 1
+            if files_since_emit >= SCAN_PROGRESS_EVERY_FILES:
+                files_since_emit = 0
+                _emit_scan_progress(on_progress, snapshot(str(f.parent)))
             if size == 0 and is_older_than(f, age_temp):
                 candidates.append({'path': path_str, 'reason': 'zero-byte', 'size': size})
                 continue
-            # partial downloads
             if f.name.endswith('.crdownload') and is_older_than(f, 7):
-                candidates.append({'path': str(f), 'reason': 'partial-download', 'size': size})
+                candidates.append({'path': path_str, 'reason': 'partial-download', 'size': size})
                 continue
-            # installers/archives older than installers age
             if ext in ext_archive and is_older_than(f, age_installers):
-                candidates.append({'path': str(f), 'reason': 'installer/archive', 'size': size})
+                candidates.append({'path': path_str, 'reason': 'installer/archive', 'size': size})
                 continue
-            # large files older than 7 days
             if size >= size_threshold and is_older_than(f, 7):
-                candidates.append({'path': str(f), 'reason': 'large-file', 'size': size})
+                candidates.append({'path': path_str, 'reason': 'large-file', 'size': size})
+        if cancelled:
+            break
+        elapsed_folder = time.time() - folder_started
+        if elapsed_folder >= SLOW_FOLDER_SECONDS:
+            logger.info('Slow scan folder: %s (%.1fs)', rootp, elapsed_folder)
+
+    final = snapshot()
+    final['cancelled'] = cancelled or bool(cancel_check and cancel_check())
+    final['completed'] = True
+    _emit_scan_progress(on_progress, final)
     return candidates
 
 def human_size(n):

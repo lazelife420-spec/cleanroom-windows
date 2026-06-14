@@ -149,6 +149,38 @@ Manual checklist:
 - [ ] Second launch while running focuses existing app or exits cleanly (no duplicate tray)
 - [ ] No pystray traceback in console
 
+## Scan lifecycle (Cleaner + tray)
+
+**PASS requires:**
+
+- Start scan from Cleaner or tray **Run Scan**
+- Animated scanning screen with live counters (folders, files, candidates, reclaimable size, elapsed)
+- **Stop Scan** visible in Cleaner hero and scanning panel during scan
+- Tray menu shows **Scanning…** / disabled Run Scan and enabled **Stop Scan** during scan
+- Tray tooltip reflects scan progress (e.g. `Scanning · 644 checked · 2 candidates`)
+- **Stop Scan** cancels safely — no receipt written, no archive/delete
+- After cancel: hero/footer show **Scan stopped — no cleanup was performed**
+- Re-scan works after cancel
+- Completed scan shows **Review ready** / **Receipt ready** (not stale state during scan)
+- No **Not Responding** during scan; no traceback
+
+**FAIL if:**
+
+- Scan shows stale Review ready / receipt chips while scanning
+- Dead blank panel with one static line and no progress
+- No Stop Scan in app or tray during scan
+- Tray menu unaware of scan state
+- Cancel leaves orphan worker or partial state without clear messaging
+
+Manual checklist:
+
+- [ ] Start scan — progress screen + counters update
+- [ ] Stop Scan in app cancels safely
+- [ ] Tray Stop Scan cancels safely
+- [ ] Re-scan after cancel works
+- [ ] Completed scan reaches correct review/receipt state
+- [ ] Tray Quit still removes icon and exits Python process
+
 ## Dialogs
 
 - [ ] Normal flows use **dark Cleanroom modals** — no white app-owned `Toplevel` / native info boxes for:

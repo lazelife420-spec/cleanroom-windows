@@ -23,6 +23,7 @@ class _FakeApp:
 def test_tray_menu_labels():
     assert 'Open Cleanroom' in TrayController.MENU_LABELS
     assert 'Run Scan' in TrayController.MENU_LABELS
+    assert 'Stop Scan' in TrayController.MENU_LABELS
     assert 'Open Latest Receipt' in TrayController.MENU_LABELS
     assert 'Open Proof Pack' in TrayController.MENU_LABELS
     assert 'Open Archive Folder' in TrayController.MENU_LABELS
