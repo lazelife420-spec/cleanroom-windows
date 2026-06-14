@@ -510,7 +510,6 @@ class StartupManagerGUI(ctk.CTk):
         self._load_scan_cache()
         self._refresh_header_proof_badges()
         self.refresh_dashboard()
-        self._set_status('Ready. Click Scan to review cleanup candidates.')
         self._sync_cleaner_state()
         self._sync_home_state()
         self._update_context_panel()
@@ -614,14 +613,28 @@ class StartupManagerGUI(ctk.CTk):
     def _is_cleaner_scanning(self) -> bool:
         return bool(getattr(self, '_cleaner_loading', False))
 
+    def _scan_display_metrics(self):
+        """Counts for Home/Cleaner hero — includes persisted last_scan when session not loaded."""
+        items = self.cleanup_items or []
+        session = getattr(self, '_scan_session_done', False)
+        if session:
+            return len(items), len(self.cleanup_selected or set()), session
+        cached = int(getattr(self, '_cached_scan_count', 0) or 0)
+        if cached > 0:
+            return cached, 0, False
+        return 0, 0, session
+
     def _sync_cleaner_state(self):
         """Single source of truth for Cleaner hero, footer, and empty layout."""
+        count, checked, scan_done = self._scan_display_metrics()
+        cached = int(getattr(self, '_cached_scan_count', 0) or 0)
         state, hero, sub, footer = cleaner_page_state(
             loading=self._cleaner_loading,
             error=self._cleaner_error,
-            count=len(self.cleanup_items or []),
-            checked=len(self.cleanup_selected or set()),
-            scan_done=getattr(self, '_scan_session_done', False),
+            count=count if scan_done else 0,
+            checked=checked,
+            scan_done=scan_done,
+            cached_count=0 if scan_done else cached,
         )
         self._cleaner_page_state = state
         if hasattr(self, 'cleanup_status_hero'):
@@ -663,13 +676,17 @@ class StartupManagerGUI(ctk.CTk):
 
     def _sync_home_state(self, *, custody_missing: int = 0):
         """Align Home hero with the same scan lifecycle as Cleaner."""
+        count, checked, scan_done = self._scan_display_metrics()
+        cached = int(getattr(self, '_cached_scan_count', 0) or 0)
         state, hero, sub, status = home_page_state(
             loading=self._cleaner_loading,
             error=self._cleaner_error,
-            count=len(self.cleanup_items or []),
-            checked=len(self.cleanup_selected or set()),
-            scan_done=getattr(self, '_scan_session_done', False),
+            count=count if scan_done else 0,
+            checked=checked,
+            scan_done=scan_done,
             custody_missing=custody_missing,
+            cached_count=0 if scan_done else cached,
+            phase=getattr(self, '_brand_phase', None),
         )
         self._home_page_state = state
         if state == ERROR:
@@ -1636,7 +1653,7 @@ class StartupManagerGUI(ctk.CTk):
             ('Custody Check', self.verify_custody,
              'Audit history — prove archived items are still on disk.'),
             ('Lights Out', self._open_lights_out,
-             'Install the wind-down / shutdown companion app.'),
+             'Separate companion app — opens release page after confirmation (no auto-install).'),
         ]
         for i, (label, cmd, tip) in enumerate(tools):
             btn = sidebar_nav_button(tools_body, label, cmd, **nav_kw)
@@ -2095,6 +2112,16 @@ class StartupManagerGUI(ctk.CTk):
         self.archive_tab.grid_rowconfigure(4, weight=1)
         self.archive_tab.grid_columnconfigure(0, weight=1)
         self._archive_split_mode = 'wide'
+        self._archive_action_btns = []
+        self._archive_loaded = False
+
+        def _archive_btn(parent, text, command, *, refresh=False, **pack_kw):
+            btn = ttk.Button(parent, text=text, style='Action.TButton', command=command, **pack_kw)
+            if refresh:
+                self._archive_refresh_btn = btn
+            else:
+                self._archive_action_btns.append(btn)
+            return btn
 
         header = ctk_theme.frame(self.archive_tab, CARD_BG, corner_radius=10)
         header.grid(row=0, column=0, sticky='ew', padx=10, pady=(4, 4))
@@ -2121,6 +2148,7 @@ class StartupManagerGUI(ctk.CTk):
         self.stat_arch_selected = self._stat_card_compact(stats_row, 3, 'Selected')
 
         qa = ctk_theme.frame(self.archive_tab, CARD_BG, corner_radius=10)
+        self._archive_qa = qa
         qa.grid(row=2, column=0, sticky='ew', padx=10, pady=(0, 4))
         qa_inner = ttk.Frame(qa, style='Card.TFrame')
         qa_inner.pack(fill='x', padx=10, pady=8)
@@ -2131,42 +2159,44 @@ class StartupManagerGUI(ctk.CTk):
             side='left', padx=(0, 10))
         ttk.Button(qa_primary, text='↩ Restore Selected', style='Primary.TButton',
                    command=self._archive_restore_selected).pack(side='left', padx=(0, 6))
-        ttk.Button(qa_primary, text='Open Archive Folder', style='Action.TButton',
-                   command=self.open_archive_folder).pack(side='left', padx=(0, 6))
-        ttk.Button(qa_primary, text='Refresh', style='Action.TButton',
-                   command=self.refresh_archive_browser).pack(side='left')
+        self._archive_action_btns.append(qa_primary.winfo_children()[-1])
+        _archive_btn(qa_primary, 'Open Archive Folder', self.open_archive_folder).pack(
+            side='left', padx=(0, 6))
+        _archive_btn(qa_primary, 'Refresh', self.refresh_archive_browser, refresh=True).pack(
+            side='left')
 
         qa_bulk = ttk.Frame(qa_inner, style='Card.TFrame')
         qa_bulk.pack(fill='x', pady=(6, 0))
         ttk.Label(qa_bulk, text='Select', style='CardInfo.TLabel').pack(side='left', padx=(0, 10))
-        ttk.Button(qa_bulk, text='Select All Safe', style='Action.TButton',
-                   command=self._archive_select_all_safe).pack(side='left', padx=(0, 6))
-        ttk.Button(qa_bulk, text='Select Visible', style='Action.TButton',
-                   command=self._archive_select_visible).pack(side='left', padx=(0, 6))
-        ttk.Button(qa_bulk, text='Clear Selection', style='Action.TButton',
-                   command=self._archive_clear_selection).pack(side='left')
+        for label, cmd in (
+            ('Select All Safe', self._archive_select_all_safe),
+            ('Select Visible', self._archive_select_visible),
+            ('Clear Selection', self._archive_clear_selection),
+        ):
+            _archive_btn(qa_bulk, label, cmd).pack(side='left', padx=(0, 6))
 
         qa_delete = ttk.Frame(qa_inner, style='Card.TFrame')
         qa_delete.pack(fill='x', pady=(6, 0))
         ttk.Label(qa_delete, text='Delete from archive', style='CardInfo.TLabel').pack(
             side='left', padx=(0, 10))
-        self.delete_archive_btn = ttk.Button(
-            qa_delete, text='Delete Eligible…', style='Action.TButton',
-            command=self.confirm_prune_selected)
+        self.delete_archive_btn = _archive_btn(
+            qa_delete, 'Delete Eligible…', self.confirm_prune_selected,
+        )
         self.delete_archive_btn.pack(side='left', padx=(0, 6))
         self._add_tooltip(self.delete_archive_btn,
                           'Permanently delete selected archived copies. Original live files untouched.')
-        ttk.Button(qa_delete, text='Delete All Safe…', style='Action.TButton',
-                   command=self.confirm_delete_all_safe).pack(side='left', padx=(0, 6))
-        ttk.Button(qa_delete, text='Delete Older Than…', style='Action.TButton',
-                   command=self.confirm_delete_older_than).pack(side='left', padx=(0, 6))
+        for label, cmd in (
+            ('Delete All Safe…', self.confirm_delete_all_safe),
+            ('Delete Older Than…', self.confirm_delete_older_than),
+        ):
+            _archive_btn(qa_delete, label, cmd).pack(side='left', padx=(0, 6))
 
         qa_secondary = ttk.Frame(qa_inner, style='Card.TFrame')
         qa_secondary.pack(fill='x', pady=(6, 0))
-        ttk.Button(qa_secondary, text='Archive Settings…', style='Action.TButton',
-                   command=self._open_archive_settings).pack(side='left')
+        _archive_btn(qa_secondary, 'Archive Settings…', self._open_archive_settings).pack(side='left')
 
         filter_bar = ttk.Frame(self.archive_tab, style='Content.TFrame')
+        self._archive_filter_bar = filter_bar
         filter_bar.grid(row=3, column=0, sticky='ew', padx=10, pady=(0, 4))
         self._archive_prune_filter = tk.StringVar(value='')
         chip_labels = (
@@ -2174,18 +2204,25 @@ class StartupManagerGUI(ctk.CTk):
             ('Review first', archive_custody.PRUNE_REVIEW if archive_custody else ''),
             ('Keep in custody', archive_custody.PRUNE_KEEP if archive_custody else ''),
         )
+        self._archive_filter_widgets = []
         for label, value in chip_labels:
-            ttk.Radiobutton(filter_bar, text=label, value=value,
-                            variable=self._archive_prune_filter,
-                            command=self._apply_archive_view_filters).pack(side='left', padx=(0, 8))
+            rb = ttk.Radiobutton(filter_bar, text=label, value=value,
+                                 variable=self._archive_prune_filter,
+                                 command=self._apply_archive_view_filters)
+            rb.pack(side='left', padx=(0, 8))
+            self._archive_filter_widgets.append(rb)
         ttk.Label(filter_bar, text='Search:', style='Info.TLabel').pack(side='left', padx=(12, 4))
         self._archive_search_var = tk.StringVar()
         search_entry = ttk.Entry(filter_bar, textvariable=self._archive_search_var,
                                  width=28, style='Search.TEntry')
         search_entry.pack(side='left')
         search_entry.bind('<Return>', lambda e: self._apply_archive_view_filters())
-        ttk.Button(filter_bar, text='Search', style='Action.TButton',
-                   command=self._apply_archive_view_filters).pack(side='left', padx=(6, 0))
+        self._archive_search_entry = search_entry
+        self._archive_filter_widgets.append(search_entry)
+        archive_search_btn = ttk.Button(filter_bar, text='Search', style='Action.TButton',
+                                        command=self._apply_archive_view_filters)
+        archive_search_btn.pack(side='left', padx=(6, 0))
+        self._archive_filter_widgets.append(archive_search_btn)
 
         self._archive_body = ttk.Frame(self.archive_tab, style='Content.TFrame')
         self._archive_body.grid(row=4, column=0, sticky='nsew', padx=10, pady=(0, 4))
@@ -2275,8 +2312,9 @@ class StartupManagerGUI(ctk.CTk):
             ('Open Original', self._archive_open_original),
             ('Copy paths', self._archive_copy_path),
         ):
-            ttk.Button(restore_row, text=label, style='Action.TButton', command=cmd).pack(
-                side='left', padx=(0, 6), pady=2)
+            btn = ttk.Button(restore_row, text=label, style='Action.TButton', command=cmd)
+            btn.pack(side='left', padx=(0, 6), pady=2)
+            self._archive_action_btns.append(btn)
 
         delete_box = ttk.Frame(qa_grid, style='Card.TFrame')
         delete_box.pack(fill='x')
@@ -2289,10 +2327,12 @@ class StartupManagerGUI(ctk.CTk):
         ).pack(anchor='w', pady=(0, 6))
         delete_row = ttk.Frame(delete_box, style='Card.TFrame')
         delete_row.pack(fill='x')
-        ttk.Button(
+        detail_delete_btn = ttk.Button(
             delete_row, text='Delete eligible…', style='Action.TButton',
             command=self.confirm_prune_selected,
-        ).pack(side='left', padx=(0, 6), pady=2)
+        )
+        detail_delete_btn.pack(side='left', padx=(0, 6), pady=2)
+        self._archive_action_btns.append(detail_delete_btn)
 
         meta = ttk.Frame(detail_inner, style='Card.TFrame')
         meta.pack(fill='both', expand=True)
@@ -4907,17 +4947,35 @@ class StartupManagerGUI(ctk.CTk):
     def _set_archive_busy(self, busy: bool, message: str = ''):
         self._archive_busy = busy
         self._sync_archive_view(loading=busy)
-        state = 'disabled' if busy else 'normal'
-        for attr in ('delete_archive_btn',):
-            btn = getattr(self, attr, None)
-            if btn is not None:
-                try:
-                    btn.config(state=state)
-                except Exception:
-                    pass
+        if busy:
+            self._archive_loaded = False
         if hasattr(self, 'archive_status_lbl') and message:
             self.archive_status_lbl.config(text=message)
+        self._sync_archive_action_states()
         self._update_brand_identity()
+
+    def _sync_archive_action_states(self):
+        """Disable archive restore/delete/search until custody records are loaded."""
+        busy = getattr(self, '_archive_busy', False)
+        loaded = getattr(self, '_archive_loaded', False) and not busy
+        total = int((getattr(self, '_archive_stats', {}) or {}).get('total', 0) or 0)
+        can_act = loaded and total > 0
+        refresh = getattr(self, '_archive_refresh_btn', None)
+        if refresh is not None:
+            try:
+                refresh.config(state='disabled' if busy else 'normal')
+            except Exception:
+                pass
+        for btn in getattr(self, '_archive_action_btns', []):
+            try:
+                btn.config(state='normal' if can_act else 'disabled')
+            except Exception:
+                pass
+        for w in getattr(self, '_archive_filter_widgets', []):
+            try:
+                w.config(state='disabled' if (busy or not loaded) else 'normal')
+            except Exception:
+                pass
 
     def _show_delete_archive_confirm(self, recs, *, title='Delete from Archive', on_confirm, preview=None):
         """Summary-only delete confirmation with eligible vs skipped buckets."""
@@ -5724,14 +5782,17 @@ class StartupManagerGUI(ctk.CTk):
             return records, stats
 
         def done(result, err):
+            self._archive_loaded = True
             self._set_archive_busy(False)
             if err is not None:
                 self.archive_status_lbl.config(text=f'Load failed: {err}')
+                self._sync_archive_action_states()
                 return
             self._archive_records_all, self._archive_stats = result
             self._update_archive_stat_cards()
             self._apply_archive_view_filters()
             self._update_context_panel()
+            self._sync_archive_action_states()
 
         self._run_bg(work, done)
 
@@ -7489,6 +7550,8 @@ class StartupManagerGUI(ctk.CTk):
                 self._select_recommendation_card(0)
             return
         count = len(self.cleanup_items) if getattr(self, '_scan_session_done', False) else 0
+        if not count:
+            count = int(getattr(self, '_cached_scan_count', 0) or 0)
         if count > 0:
             checked = len(self.cleanup_selected)
             size = self._format_size(self.cleanup_total_size)
@@ -7603,13 +7666,29 @@ class StartupManagerGUI(ctk.CTk):
             self.recent_proofpack_lbl.configure(text='None yet')
 
     def _open_lights_out(self):
-        """Open official Lights Out companion release — external, not a Cleanroom workflow."""
-        import webbrowser
-        try:
-            webbrowser.open(brand.LIGHTS_OUT_RELEASE_URL)
-            self._set_status('Opening Lights Out companion release…')
-        except Exception as e:
-            messagebox.showerror('Lights Out', f'Unable to open release page:\n{e}')
+        """Companion app — confirm before opening the release page (never auto-download)."""
+        dlg = CleanroomModal(
+            self, 'Lights Out', width=480, height=280, colors=self._dialog_colors(),
+        )
+        dlg.heading('Companion app')
+        dlg.message(
+            'Lights Out is a separate companion app for wind-down and shutdown timing.\n\n'
+            'Cleanroom does not install anything automatically. You can review the '
+            'official release page in your browser.',
+            wrap=420,
+        )
+
+        def _open_release_page():
+            import webbrowser
+            try:
+                webbrowser.open(brand.LIGHTS_OUT_RELEASE_URL)
+                self._set_status('Opening Lights Out release page…')
+            except Exception as e:
+                messagebox.showerror('Lights Out', f'Unable to open release page:\n{e}')
+            dlg.close()
+
+        dlg.add_button('Open release page', _open_release_page, primary=True, side='left')
+        dlg.add_button('Cancel', dlg.close)
 
     def open_archive_folder(self):
         cfg = self._load_cleanup_config()

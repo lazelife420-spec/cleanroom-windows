@@ -38,7 +38,28 @@ def test_cleaner_receipt_ready():
     assert 'Receipt ready' in hero
 
 
+def test_cleaner_review_ready_from_cache():
+    state, hero, _, footer = cleaner_page_state(cached_count=2)
+    assert state == RESULTS_READY
+    assert hero == 'Review ready'
+    assert '2 candidate' in footer
+
+
 def test_home_empty_after_scan():
     state, hero, _, _ = home_page_state(scan_done=True)
     assert state == EMPTY_DONE
     assert hero == 'Scan complete'
+
+
+def test_home_review_ready_from_cache():
+    state, hero, _, status = home_page_state(cached_count=2)
+    assert state == RESULTS_READY
+    assert hero == 'Review ready'
+    assert 'Review ready' in status
+
+
+def test_home_archive_complete():
+    state, hero, _, status = home_page_state(phase='archived')
+    assert state == EMPTY_DONE
+    assert hero == 'Archive complete'
+    assert 'Archive complete' in status

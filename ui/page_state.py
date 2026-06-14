@@ -16,6 +16,7 @@ def cleaner_page_state(
     count: int = 0,
     checked: int = 0,
     scan_done: bool = False,
+    cached_count: int = 0,
 ) -> tuple[str, str, str, str]:
     """Return (state, hero_title, hero_subtitle, footer_status)."""
     if loading:
@@ -33,21 +34,24 @@ def cleaner_page_state(
             short,
             f'Scan failed: {short}',
         )
-    if count > 0 and checked > 0:
+    effective = count if scan_done else cached_count
+    had_scan = scan_done or cached_count > 0
+    effective_checked = checked if scan_done else 0
+    if effective > 0 and effective_checked > 0:
         return (
             RECEIPT_READY,
             'Receipt ready',
-            f'{count} candidate(s) · {checked} checked · preview receipt before archive.',
-            f'Receipt ready — {count} candidate(s), {checked} checked.',
+            f'{effective} candidate(s) · {effective_checked} checked · preview receipt before archive.',
+            f'Receipt ready — {effective} candidate(s), {effective_checked} checked.',
         )
-    if count > 0:
+    if effective > 0:
         return (
             RESULTS_READY,
-            'Candidates found',
-            f'{count} candidate(s) — check items, then preview receipt.',
-            f'Scan complete — {count} candidate(s) found.',
+            'Review ready',
+            f'{effective} candidate(s) — check items, then preview receipt.',
+            f'Review ready — {effective} candidate(s) awaiting review.',
         )
-    if scan_done:
+    if had_scan:
         return (
             EMPTY_DONE,
             'Scan complete',
@@ -70,6 +74,8 @@ def home_page_state(
     checked: int = 0,
     scan_done: bool = False,
     custody_missing: int = 0,
+    cached_count: int = 0,
+    phase: str | None = None,
 ) -> tuple[str, str, str, str]:
     """Return (state, hero_title, hero_subtitle, status_line)."""
     if loading:
@@ -82,21 +88,31 @@ def home_page_state(
     if error:
         short = error if len(error) < 80 else error[:77] + '…'
         return ERROR, 'Scan failed', short, f'Scan failed: {short}'
-    if count > 0 and checked > 0:
+    if phase == 'archived':
+        return (
+            EMPTY_DONE,
+            'Archive complete',
+            'Cleanup archived — receipt saved on disk.',
+            'Archive complete.',
+        )
+    effective = count if scan_done else cached_count
+    had_scan = scan_done or cached_count > 0
+    effective_checked = checked if scan_done else 0
+    if effective > 0 and effective_checked > 0:
         return (
             RECEIPT_READY,
             'Receipt ready',
-            f'{count} candidate(s) ready — preview receipt, then archive.',
-            f'Receipt ready — {count} candidate(s), {checked} checked.',
+            f'{effective} candidate(s) ready — preview receipt, then archive.',
+            f'Receipt ready — {effective} candidate(s), {effective_checked} checked.',
         )
-    if count > 0:
+    if effective > 0:
         return (
             RESULTS_READY,
-            'Candidates found',
-            f'{count} candidate(s) found — review on Cleaner before archive.',
-            f'{count} candidate(s) awaiting review.',
+            'Review ready',
+            f'{effective} candidate(s) found — review on Cleaner before archive.',
+            f'Review ready — {effective} candidate(s) awaiting review.',
         )
-    if scan_done:
+    if had_scan:
         return (
             EMPTY_DONE,
             'Scan complete',
