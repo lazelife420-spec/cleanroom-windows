@@ -923,8 +923,8 @@ class StartupManagerGUI(ctk.CTk):
         s.configure('Treeview.Heading', font=('Segoe UI Semibold', 10), background=HEAD_BG,
                     foreground=TEXT, relief='flat')
         s.map('Treeview.Heading', background=[('active', ACCENT_SOFT)])
-        row_h, tree_font = (22, ('Segoe UI', 9)) if self.power_user else (28, ('Segoe UI', 10))
-        s.configure('Treeview', font=tree_font, rowheight=row_h + 4, background=CARD_BG,
+        row_h, tree_font = (26, ('Segoe UI', 9)) if self.power_user else (32, ('Segoe UI', 10))
+        s.configure('Treeview', font=tree_font, rowheight=row_h + 8, background=CARD_BG,
                     foreground=TEXT, fieldbackground=CARD_BG, borderwidth=0)
         s.map('Treeview',
               background=[('selected', ACCENT_SOFT)],
@@ -1053,16 +1053,24 @@ class StartupManagerGUI(ctk.CTk):
             on_preview=self.preview_cleanup_receipt,
             on_apply=self.apply_cleanup,
             on_restore=lambda: (self.tab_control.select(5), self.refresh_restore()),
-            more_items=(
-                ('Change theme…', self.cycle_theme),
-                ('Cleanroom Receipt', self.open_last_receipt),
-                ('Proof Pack (HTML)', self.export_audit),
-                ('Custody Check', self.verify_custody),
-                ('Registry Snapshot…', self.open_registry_health),
-                ('Cleanroom Rewind', self.open_time_machine),
-                ('Open Archive Tab', self.open_archive_browser_tab),
-                ('Schedule Cleanup', self.schedule_optimization),
-                ('Telemetry…', self._show_telemetry_dialog),
+            more_groups=(
+                ('Receipts', (
+                    ('Latest Receipt', self.open_last_receipt),
+                    ('Proof Pack (HTML)', self.export_audit),
+                )),
+                ('Custody', (
+                    ('Verify Custody', self.verify_custody),
+                    ('Open Archive', self.open_archive_browser_tab),
+                )),
+                ('Tools', (
+                    ('Registry Snapshot', self.open_registry_health),
+                    ('Cleanroom Rewind', self.open_time_machine),
+                    ('Schedule Cleanup', self.schedule_optimization),
+                )),
+                ('Diagnostics', (
+                    ('Local Logs', self._show_diagnostics_dialog),
+                    ('Change theme…', self.cycle_theme),
+                )),
             ),
         )
         self._hdr_toolbar = self._command_bar.frame
@@ -1413,7 +1421,7 @@ class StartupManagerGUI(ctk.CTk):
     def _build_sidebar(self, parent):
         sidebar = ctk_theme.frame(parent, SIDEBAR_BG, corner_radius=10)
         sidebar.pack(side='left', fill='y', padx=(0, 12), pady=(0, 6))
-        sidebar.configure(width=224)
+        sidebar.configure(width=232)
         sidebar.pack_propagate(False)
         sidebar.grid_rowconfigure(1, weight=1)
         sidebar.grid_columnconfigure(0, weight=1)
@@ -1459,7 +1467,7 @@ class StartupManagerGUI(ctk.CTk):
         ):
             btn = sidebar_nav_button(
                 main_body, label, lambda i=idx: self._navigate_to_tab(i), **nav_kw)
-            btn.pack(fill='x', pady=3, padx=4)
+            btn.pack(fill='x', pady=4, padx=6)
             self._nav_buttons.append((idx, btn))
             self._add_tooltip(btn, tip)
 
@@ -1474,7 +1482,7 @@ class StartupManagerGUI(ctk.CTk):
         ):
             btn = sidebar_nav_button(
                 sys_body, label, lambda i=idx: self._navigate_to_tab(i), **nav_kw)
-            btn.pack(fill='x', pady=3, padx=4)
+            btn.pack(fill='x', pady=4, padx=6)
             self._nav_buttons.append((idx, btn))
             self._add_tooltip(btn, tip)
 
@@ -1502,7 +1510,7 @@ class StartupManagerGUI(ctk.CTk):
         ]
         for i, (label, cmd, tip) in enumerate(tools):
             btn = sidebar_nav_button(tools_body, label, cmd, **nav_kw)
-            btn.pack(fill='x', pady=3, padx=4)
+            btn.pack(fill='x', pady=4, padx=6)
             if i == 0:
                 self._sidebar_explorer_btn = btn
             self._add_tooltip(btn, tip)
@@ -2475,7 +2483,14 @@ class StartupManagerGUI(ctk.CTk):
         self.tree.column('command', width=240, anchor='w', stretch=False)
         self.tree.tag_configure('oddrow', background=CARD_BG)
         self.tree.tag_configure('evenrow', background=ROW_ALT)
-        self.tree.bind('<<TreeviewSelect>>', self._on_row_select)
+        self._startup_rows = []
+        self._startup_context_menu = None
+        self._bind_selectable_table(
+            self.tree,
+            on_select=lambda: (self._update_detail(), self._update_actions()),
+            on_double=self._on_startup_double_click,
+            on_right=self._on_startup_right_click,
+        )
         self.startup_empty_hint = self._make_empty_hint(
             self.tree, 'No startup items to show.\nTry clearing the search or switching category.')
 
@@ -2526,6 +2541,10 @@ class StartupManagerGUI(ctk.CTk):
         self.copy_command_detail = ttk.Button(detail_btns, text='Copy Command',
                                               style='Action.TButton', command=self.copy_command)
         self.copy_command_detail.pack(side='left')
+        self.startup_open_loc_btn = ttk.Button(
+            detail_btns, text='Open Location', style='Action.TButton',
+            command=self._startup_open_file_location)
+        self.startup_open_loc_btn.pack(side='left', padx=(8, 0))
 
         self._startup_split_mode = None
         self._startup_detail_frame = self._startup_detail_panel
@@ -2641,13 +2660,42 @@ class StartupManagerGUI(ctk.CTk):
         detail_inner.pack(fill='both', expand=True, padx=12, pady=12)
         ttk.Label(detail_inner, text='Candidate details', font=('Segoe UI', 11, 'bold'),
                   background=CARD_BG).pack(anchor='w', pady=(0, 8))
-        self._cleanup_detail_reason = ttk.Label(detail_inner, text='—', style='CardInfo.TLabel', wraplength=240)
-        self._cleanup_detail_size = ttk.Label(detail_inner, text='—', style='CardInfo.TLabel', wraplength=240)
         self._cleanup_detail_path = ttk.Label(
-            detail_inner, text='Select a candidate to review the full path.',
-            style='CardInfo.TLabel', wraplength=240, justify='left')
-        for lbl in (self._cleanup_detail_reason, self._cleanup_detail_size, self._cleanup_detail_path):
+            detail_inner, text='—', style='CardInfo.TLabel', wraplength=260, justify='left')
+        self._cleanup_detail_reason = ttk.Label(
+            detail_inner, text='—', style='CardInfo.TLabel', wraplength=260, justify='left')
+        self._cleanup_detail_size = ttk.Label(
+            detail_inner, text='—', style='CardInfo.TLabel', wraplength=260)
+        self._cleanup_detail_archive = ttk.Label(
+            detail_inner, text='—', style='CardInfo.TLabel', wraplength=260, justify='left')
+        self._cleanup_detail_receipt = ttk.Label(
+            detail_inner, text='—', style='CardInfo.TLabel', wraplength=260, justify='left')
+        self._cleanup_detail_why = ttk.Label(
+            detail_inner, text='Select a candidate to review path, archive destination, and safety notes.',
+            style='CardInfo.TLabel', wraplength=260, justify='left', foreground=ACCENT)
+        for lbl in (
+            self._cleanup_detail_path, self._cleanup_detail_reason, self._cleanup_detail_size,
+            self._cleanup_detail_archive, self._cleanup_detail_receipt, self._cleanup_detail_why,
+        ):
             lbl.pack(anchor='w', pady=(0, 8))
+        cleaner_detail_btns = ttk.Frame(detail_inner, style='Card.TFrame')
+        cleaner_detail_btns.pack(fill='x', pady=(4, 0))
+        self._cleanup_btn_open = ttk.Button(
+            cleaner_detail_btns, text='Open location', style='Action.TButton',
+            command=self._cleanup_open_location)
+        self._cleanup_btn_open.pack(side='left')
+        self._cleanup_btn_copy = ttk.Button(
+            cleaner_detail_btns, text='Copy path', style='Action.TButton',
+            command=self._cleanup_copy_path)
+        self._cleanup_btn_copy.pack(side='left', padx=(6, 0))
+        self._cleanup_btn_exclude = ttk.Button(
+            cleaner_detail_btns, text='Exclude', style='Action.TButton',
+            command=self._cleanup_exclude_selected)
+        self._cleanup_btn_exclude.pack(side='left', padx=(6, 0))
+        self._cleanup_btn_preview = ttk.Button(
+            cleaner_detail_btns, text='Preview receipt', style='Action.TButton',
+            command=self._cleanup_preview_single)
+        self._cleanup_btn_preview.pack(side='left', padx=(6, 0))
 
         status = ttk.Frame(self.cleanup_tab)
         status.grid(row=4, column=0, sticky='ew', padx=10, pady=(0, 8))
@@ -2663,17 +2711,110 @@ class StartupManagerGUI(ctk.CTk):
     def _on_cleanup_select(self):
         sel = self.cleanup_tree.selection()
         if not sel or not self.cleanup_items:
-            self._cleanup_detail_reason.config(text='—')
-            self._cleanup_detail_size.config(text='—')
-            self._cleanup_detail_path.config(text='Select a candidate to review the full path.')
+            self._cleanup_detail_path.config(text='Path: —')
+            self._cleanup_detail_reason.config(text='Category: —')
+            self._cleanup_detail_size.config(text='Size: —')
+            self._cleanup_detail_archive.config(text='Archive destination: —')
+            self._cleanup_detail_receipt.config(text='Receipt: —')
+            self._cleanup_detail_why.config(
+                text='Select a candidate to review path, archive destination, and safety notes.')
             return
         idx = self.cleanup_tree.index(sel[0])
         if idx < 0 or idx >= len(self.cleanup_items):
             return
         item = self.cleanup_items[idx]
-        self._cleanup_detail_reason.config(text=f'Category: {item.get("reason") or "other"}')
+        path = item.get('path') or '—'
+        reason = item.get('reason') or 'other'
+        cfg = self._cached_cfg() or {}
+        archive_dest = self._planned_archive_dest(item, cfg)
+        checked = idx in self.cleanup_selected
+        self._cleanup_detail_path.config(text=f'Path:\n{path}')
+        self._cleanup_detail_reason.config(text=f'Category: {reason}')
         self._cleanup_detail_size.config(text=f'Size: {self._format_size(item.get("size", 0))}')
-        self._cleanup_detail_path.config(text=item.get('path') or '—')
+        self._cleanup_detail_archive.config(text=f'Archive destination:\n{archive_dest}')
+        self._cleanup_detail_receipt.config(
+            text='Receipt: Draft on preview' if checked else 'Receipt: Not included until checked')
+        self._cleanup_detail_why.config(text=self._cleanup_reason_hint(reason))
+        for btn in (
+            self._cleanup_btn_open, self._cleanup_btn_copy,
+            self._cleanup_btn_exclude, self._cleanup_btn_preview,
+        ):
+            btn.config(state='normal')
+
+    def _cleanup_reason_hint(self, reason: str) -> str:
+        hints = {
+            'zero-byte': 'Empty file past age threshold — usually safe to archive.',
+            'partial-download': 'Abandoned partial download — typically safe to archive.',
+            'installer/archive': 'Old installer or archive — review before archiving.',
+            'large-file': 'Large file — review carefully; highest reclaim per item.',
+        }
+        return hints.get(reason, 'Review the path — archive only if you recognize and no longer need it.')
+
+    def _planned_archive_dest(self, item, cfg):
+        path = item.get('path') or ''
+        if not path:
+            return '—'
+        archive_dir = (cfg or {}).get('archive_dir') or '(auto archive folder on apply)'
+        name = Path(path).name
+        return f'{archive_dir}/{name}'
+
+    def _selected_cleanup_index(self):
+        sel = self.cleanup_tree.selection()
+        if not sel or not self.cleanup_items:
+            return None
+        idx = self.cleanup_tree.index(sel[0])
+        if 0 <= idx < len(self.cleanup_items):
+            return idx
+        return None
+
+    def _cleanup_open_location(self):
+        idx = self._selected_cleanup_index()
+        if idx is None:
+            return
+        path = self.cleanup_items[idx].get('path')
+        if not path:
+            return
+        folder = Path(path).parent
+        if folder.is_dir():
+            try:
+                os.startfile(str(folder))
+            except OSError as e:
+                messagebox.showerror('Open location', str(e))
+        else:
+            messagebox.showinfo('Open location', 'Folder not found on disk.')
+
+    def _cleanup_copy_path(self):
+        idx = self._selected_cleanup_index()
+        if idx is None:
+            return
+        path = self.cleanup_items[idx].get('path') or ''
+        try:
+            self.clipboard_clear()
+            self.clipboard_append(path)
+            self._set_status('Path copied to clipboard.')
+        except tk.TclError:
+            messagebox.showinfo('Copy path', path)
+
+    def _cleanup_exclude_selected(self):
+        idx = self._selected_cleanup_index()
+        if idx is None:
+            return
+        item = self.cleanup_items.pop(idx)
+        self.cleanup_selected = {i if i < idx else i - 1 for i in self.cleanup_selected if i != idx}
+        self._update_cleanup_tree()
+        self._update_cleanup_summary(self._cached_cfg())
+        self._set_status(
+            f'Removed from scan: {Path(item.get("path") or "").name}. '
+            'Add an exclude pattern in Settings → Advanced to persist.')
+
+    def _cleanup_preview_single(self):
+        idx = self._selected_cleanup_index()
+        if idx is None:
+            return
+        if idx not in self.cleanup_selected:
+            self.cleanup_selected.add(idx)
+            self._update_cleanup_tree()
+        self.preview_cleanup_receipt()
 
     def _update_cleaner_hero(self):
         if not hasattr(self, 'cleanup_status_hero'):
@@ -2933,7 +3074,7 @@ class StartupManagerGUI(ctk.CTk):
             app_body, 'Scan on startup (default off)', self.set_scan_on_startup,
             text_color=TEXT, progress_color=ACCENT,
             button_color=BORDER, button_hover_color=ACCENT,
-        ).pack(anchor='w', pady=(0, 4))
+        ).pack(anchor='w', pady=(0, 8))
 
         self.set_remember_geometry = tk.BooleanVar(
             value=bool(load_ui_prefs().get('remember_window_geometry', True)))
@@ -2941,7 +3082,7 @@ class StartupManagerGUI(ctk.CTk):
             app_body, 'Remember window size and position', self.set_remember_geometry,
             text_color=TEXT, progress_color=ACCENT,
             button_color=BORDER, button_hover_color=ACCENT,
-        ).pack(anchor='w', pady=(0, 4))
+        ).pack(anchor='w', pady=(0, 8))
 
         self.set_remember_last_tab = tk.BooleanVar(
             value=bool(load_ui_prefs().get('remember_last_tab', True)))
@@ -2956,7 +3097,7 @@ class StartupManagerGUI(ctk.CTk):
         ttk.Label(theme_row, text='Theme:', style='CardInfo.TLabel').pack(side='left')
         self.set_theme_var = tk.StringVar(value=PALETTES[CURRENT_THEME]['LABEL'])
         theme_combo = ttk.Combobox(theme_row, textvariable=self.set_theme_var, state='readonly',
-                                   values=[PALETTES[t]['LABEL'] for t in THEME_ORDER], width=22)
+                                   values=[PALETTES[t]['LABEL'] for t in THEME_ORDER], width=28)
         theme_combo.pack(side='left', padx=(8, 0))
         self._add_tooltip(theme_combo, 'Applied when you click Save Settings (window rebuilds).')
 
@@ -2966,7 +3107,7 @@ class StartupManagerGUI(ctk.CTk):
                   style='CardInfo.TLabel').pack(side='left')
         self.set_default_tab_var = tk.StringVar(value='Home')
         ttk.Combobox(
-            launch_row, textvariable=self.set_default_tab_var, state='readonly', width=18,
+            launch_row, textvariable=self.set_default_tab_var, state='readonly', width=24,
             values=('Home', 'Activity', 'Startup', 'Cleaner', 'Archive', 'Settings'),
         ).pack(side='left', padx=(8, 0))
 
@@ -4368,11 +4509,29 @@ class StartupManagerGUI(ctk.CTk):
             self.archive_status_lbl.config(text=message)
         self._update_brand_identity()
 
-    def _show_delete_archive_confirm(self, recs, *, title='Delete from Archive', on_confirm):
-        """Summary-only delete confirmation — never dump thousands of paths in a native dialog."""
-        n = len(recs)
-        total_bytes = sum(int(r.get('size') or 0) for r in recs)
-        receipt_n = sum(1 for r in recs if r.get('receipt_path'))
+    def _show_delete_archive_confirm(self, recs, *, title='Delete from Archive', on_confirm, preview=None):
+        """Summary-only delete confirmation with eligible vs skipped buckets."""
+        selected = len(recs)
+        if preview is None and archive_custody is not None:
+            try:
+                preview = archive_custody.apply_prune(
+                    recs, str(self.restore_log_path),
+                    receipt_dir=brand.user_data_dir() / 'receipts', dry_run=True)
+            except Exception:
+                preview = None
+        eligible_list = (preview or {}).get('pruned') or recs
+        eligible = len(eligible_list)
+        skipped_list = (preview or {}).get('skipped') or []
+        skipped = len(skipped_list)
+        eligible_bytes = int((preview or {}).get('bytes_pruned') or 0)
+        if not eligible_bytes:
+            eligible_bytes = sum(int(r.get('size') or 0) for r in eligible_list)
+
+        reason_counts: dict[str, int] = {}
+        for s in skipped_list:
+            reason = s.get('reason') or 'other'
+            reason_counts[reason] = reason_counts.get(reason, 0) + 1
+
         dlg = tk.Toplevel(self)
         dlg.title(title)
         dlg.transient(self)
@@ -4384,18 +4543,26 @@ class StartupManagerGUI(ctk.CTk):
 
         ttk.Label(
             frm,
-            text=f'Delete {n:,} archived file{"s" if n != 1 else ""}?',
+            text='Delete from archive custody',
             style='Header.TLabel',
         ).pack(anchor='w')
-        summary = (
-            f'Total size: {self._format_size(total_bytes)}\n'
-            f'Receipts available: {"Yes" if receipt_n else "No"}\n\n'
-            'Original live files are not touched.\n'
-            'This permanently removes archived copies from Cleanroom custody.\n'
-            'This cannot be undone.'
-        )
-        ttk.Label(frm, text=summary, style='CardInfo.TLabel', wraplength=420, justify='left').pack(
-            anchor='w', pady=(10, 0))
+        summary_lines = [
+            f'Selected: {selected:,}',
+            f'Eligible to delete now: {eligible:,} ({self._format_size(eligible_bytes)})',
+            f'Will be skipped: {skipped:,}',
+            '',
+            'Original live files are not touched.',
+            'This permanently removes archived copies from Cleanroom custody.',
+        ]
+        if reason_counts:
+            summary_lines.append('')
+            summary_lines.append('Skipped / caution summary:')
+            for reason, cnt in sorted(reason_counts.items(), key=lambda x: -x[1])[:8]:
+                summary_lines.append(f'  · {reason}: {cnt:,}')
+        ttk.Label(
+            frm, text='\n'.join(summary_lines), style='CardInfo.TLabel',
+            wraplength=440, justify='left',
+        ).pack(anchor='w', pady=(10, 0))
 
         btns = ttk.Frame(frm, style='Content.TFrame')
         btns.pack(fill='x', pady=(16, 0))
@@ -4404,12 +4571,22 @@ class StartupManagerGUI(ctk.CTk):
             command=lambda: self._show_delete_file_list(recs, parent=dlg),
         ).pack(side='left')
         ttk.Button(btns, text='Cancel', style='Action.TButton', command=dlg.destroy).pack(side='right')
-        ttk.Button(
-            btns, text='Delete from Archive', style='Primary.TButton',
-            command=lambda: (dlg.destroy(), on_confirm()),
-        ).pack(side='right', padx=(0, 8))
-        dlg.geometry('460x260')
-        dlg.minsize(420, 220)
+        delete_lbl = (
+            f'Delete {eligible:,} eligible item{"s" if eligible != 1 else ""}'
+            if eligible else 'Nothing eligible to delete')
+
+        def _confirm_delete():
+            dlg.destroy()
+            on_confirm()
+
+        delete_btn = ttk.Button(
+            btns, text=delete_lbl, style='Primary.TButton',
+            command=_confirm_delete,
+            state='normal' if eligible else 'disabled',
+        )
+        delete_btn.pack(side='right', padx=(0, 8))
+        dlg.geometry('480x320')
+        dlg.minsize(440, 280)
 
     def _show_delete_file_list(self, recs, *, parent=None):
         """Scrollable optional file list for large archive delete selections."""
@@ -4579,9 +4756,12 @@ class StartupManagerGUI(ctk.CTk):
 
         def build_row(idx, v):
             tag = 'evenrow' if idx % 2 else 'oddrow'
-            return (str(idx), (v['name'], v['source'], v['location'], v['command']), (tag,))
+            cmd = v.get('command') or ''
+            short_cmd = (cmd[:42] + '…') if len(cmd) > 45 else cmd
+            return (str(idx), (v['name'], v['source'], v['location'], short_cmd), (tag,))
 
         def on_complete():
+            self._startup_rows = list(rows)
             self._refresh_empty_hint(self.startup_empty_hint, self.tree)
             self._update_context_panel()
 
@@ -4728,13 +4908,18 @@ class StartupManagerGUI(ctk.CTk):
         return getattr(self, '_last_cfg', None)
 
     def _on_cleanup_click(self, event):
-        if self.cleanup_tree.identify_region(event.x, event.y) != 'cell':
+        region = self.cleanup_tree.identify_region(event.x, event.y)
+        if region != 'cell':
             return
-        if self.cleanup_tree.identify_column(event.x) != '#1':
+        row_id = self.cleanup_tree.identify_row(event.y)
+        if not row_id:
             return
-        row = self.cleanup_tree.identify_row(event.y)
-        if row:
-            self._toggle_cleanup_index(self.cleanup_tree.index(row))
+        col = self.cleanup_tree.identify_column(event.x)
+        if col == '#1':
+            self._toggle_cleanup_index(self.cleanup_tree.index(row_id))
+        self.cleanup_tree.selection_set(row_id)
+        self.cleanup_tree.focus(row_id)
+        self._on_cleanup_select()
 
     def _on_cleanup_space(self, event):
         sel = self.cleanup_tree.selection()
@@ -6031,13 +6216,8 @@ class StartupManagerGUI(ctk.CTk):
                 skipped = result.get('skipped') or []
                 freed = self._format_size(result.get('bytes_pruned', 0))
                 rp = result.get('receipt_path')
-                detail = (f'Deleted {n:,} archived file(s) ({freed}) from custody.\n'
-                          'Original live files were not touched.')
-                if skipped:
-                    detail += f'\n\nSkipped {len(skipped):,} item(s) — see Activity log.'
-                messagebox.showinfo('Delete Receipt', detail)
-                if rp and Path(rp).is_file():
-                    self._view_receipt_file(rp)
+                self._show_delete_result_dialog(
+                    deleted=n, skipped=len(skipped), freed=freed, receipt_path=rp)
                 self.refresh_activity()
                 self.refresh_restore()
                 if context == 'archive':
@@ -6048,7 +6228,18 @@ class StartupManagerGUI(ctk.CTk):
         if skip_confirm:
             proceed()
             return
-        self._show_delete_archive_confirm(recs, on_confirm=proceed)
+
+        def show_confirm():
+            preview = None
+            try:
+                preview = archive_custody.apply_prune(
+                    recs, str(self.restore_log_path),
+                    receipt_dir=brand.user_data_dir() / 'receipts', dry_run=True)
+            except Exception:
+                pass
+            self._show_delete_archive_confirm(recs, on_confirm=proceed, preview=preview)
+
+        show_confirm()
 
     def prune_archive_dialog(self):
         """Open Archive Browser filtered to Safe to delete recommendations."""
@@ -6216,21 +6407,14 @@ class StartupManagerGUI(ctk.CTk):
                 messagebox.showerror('Verify Custody', f'Verification failed: {err}')
                 return
             ok = result['missing'] == 0
-            head = ('CUSTODY VERIFIED ✓' if ok else 'CUSTODY CHECK FAILED')
-            body = (f"{result['verified']}/{result['total']} archived item(s) are "
-                    f"present on disk right now "
-                    f"({self._format_size(result['bytes_in_custody'])} in custody).\n\n")
             if ok:
-                body += ('Every file and registry key Cleanroom has ever archived '
-                         'is still where the log says it is — all of it restorable. '
-                         'No other cleaner can show you this.')
-                messagebox.showinfo(f'Verify Custody — {head}', body)
+                body = (f"{result['verified']}/{result['total']} archived item(s) are "
+                        f"present on disk right now "
+                        f"({self._format_size(result['bytes_in_custody'])} in custody).\n\n"
+                        'Every file Cleanroom has archived is still where the log says it is.')
+                messagebox.showinfo('Verify Custody — CUSTODY VERIFIED ✓', body)
             else:
-                sample = '\n'.join(result['missing_items'][:8])
-                body += (f"{result['missing']} item(s) missing from the archive — "
-                         'usually files removed by "Prune Archive" or moved/deleted '
-                         f'outside Cleanroom:\n\n{sample}')
-                messagebox.showwarning(f'Verify Custody — {head}', body)
+                self._show_custody_verify_summary(result)
             self.refresh_activity()
 
         self._run_bg(lambda: proof_module.verify_entries(entries), done)
@@ -7011,26 +7195,115 @@ class StartupManagerGUI(ctk.CTk):
     # ------------------------------------------------------------------
     # Telemetry dialog
     # ------------------------------------------------------------------
-    def _show_telemetry_dialog(self):
+    def _show_delete_result_dialog(self, *, deleted, skipped, freed, receipt_path=None):
+        dlg = tk.Toplevel(self)
+        dlg.title('Delete from Archive — Result')
+        dlg.transient(self)
+        dlg.grab_set()
+        dlg.configure(bg=BG)
+        dlg.bind('<Escape>', lambda e: dlg.destroy())
+        frm = ttk.Frame(dlg, style='Content.TFrame', padding=16)
+        frm.pack(fill='both', expand=True)
+        ttk.Label(frm, text='Archive delete complete', style='Header.TLabel').pack(anchor='w')
+        lines = [
+            f'Deleted: {deleted:,} archived file(s) ({freed})',
+            f'Skipped: {skipped:,} item(s)',
+            '',
+            'Original live files were not touched.',
+        ]
+        if receipt_path:
+            lines.append(f'Receipt: {receipt_path}')
+        ttk.Label(frm, text='\n'.join(lines), style='CardInfo.TLabel',
+                  wraplength=420, justify='left').pack(anchor='w', pady=(10, 0))
+        btns = ttk.Frame(frm, style='Content.TFrame')
+        btns.pack(fill='x', pady=(16, 0))
+        if receipt_path and Path(receipt_path).is_file():
+            ttk.Button(
+                btns, text='Open Receipt', style='Primary.TButton',
+                command=lambda: (self._view_receipt_file(receipt_path), dlg.destroy()),
+            ).pack(side='left')
+        ttk.Button(btns, text='OK', style='Action.TButton', command=dlg.destroy).pack(side='right')
+        dlg.geometry('440x240')
+
+    def _show_custody_verify_summary(self, result):
+        verified = result.get('verified', 0)
+        total = result.get('total', 0)
+        missing = result.get('missing', 0)
+        summary = (
+            f'Custody check failed\n\n'
+            f'{verified:,} / {total:,} archived items are present on disk.\n'
+            f'{missing:,} items are missing from archive.\n\n'
+            'This usually means files were pruned, moved, or deleted outside Cleanroom.'
+        )
+        missing_items = result.get('missing_items') or []
+        report_lines = [
+            'CLEANROOM — CUSTODY VERIFY REPORT',
+            '',
+            summary.replace('\n\n', '\n'),
+            '',
+            'Missing items:',
+        ]
+        report_lines.extend(f'  · {p}' for p in missing_items)
+
+        dlg = tk.Toplevel(self)
+        dlg.title('Verify Custody')
+        dlg.transient(self)
+        dlg.grab_set()
+        dlg.configure(bg=BG)
+        dlg.bind('<Escape>', lambda e: dlg.destroy())
+        frm = ttk.Frame(dlg, style='Content.TFrame', padding=16)
+        frm.pack(fill='both', expand=True)
+        ttk.Label(frm, text='Custody check failed', style='Header.TLabel').pack(anchor='w')
+        ttk.Label(frm, text=summary, style='CardInfo.TLabel', wraplength=440,
+                  justify='left').pack(anchor='w', pady=(10, 0))
+        btns = ttk.Frame(frm, style='Content.TFrame')
+        btns.pack(fill='x', pady=(16, 0))
+
+        def _open_report():
+            self._show_text_dialog('Custody Verify — Full Report', '\n'.join(report_lines),
+                                   width=680, height=520)
+
+        def _copy_summary():
+            try:
+                self.clipboard_clear()
+                self.clipboard_append(summary)
+                self._set_status('Custody summary copied.')
+            except tk.TclError:
+                messagebox.showinfo('Copy summary', summary)
+
+        ttk.Button(btns, text='Open full report', style='Action.TButton',
+                   command=_open_report).pack(side='left')
+        ttk.Button(btns, text='Copy summary', style='Action.TButton',
+                   command=_copy_summary).pack(side='left', padx=(8, 0))
+        ttk.Button(btns, text='OK', style='Primary.TButton', command=dlg.destroy).pack(side='right')
+        dlg.geometry('460x280')
+
+    def _show_diagnostics_dialog(self):
         dlg = tk.Toplevel(self)
         dlg.configure(bg=BG)
-        dlg.title('Telemetry settings')
-        dlg.geometry('420x220')
+        dlg.title('Diagnostics')
+        dlg.geometry('440x240')
         dlg.resizable(False, False)
         dlg.transient(self)
         dlg.grab_set()
         dlg.bind('<Escape>', lambda e: dlg.destroy())
 
-        ttk.Label(dlg, text='Telemetry (opt-in)', font=('Segoe UI', 12, 'bold')).pack(anchor='w', padx=12, pady=(12, 4))
-        ttk.Label(dlg, text='We collect minimal anonymous usage metrics to improve Cleanroom (no personal files). Opt-in is local and can be turned off anytime.',
-                  style='Info.TLabel', wraplength=400).pack(anchor='w', padx=12)
+        ttk.Label(dlg, text='Local diagnostics', font=('Segoe UI', 12, 'bold')).pack(
+            anchor='w', padx=12, pady=(12, 4))
+        ttk.Label(
+            dlg,
+            text='Local-only logs and optional anonymous metrics. Nothing leaves this PC unless '
+                 'you opt in. Use this panel to review diagnostics preferences.',
+            style='Info.TLabel', wraplength=400,
+        ).pack(anchor='w', padx=12)
         var = tk.BooleanVar(value=False)
         try:
             if enable_telemetry and enable_telemetry.is_opted_in():
                 var.set(True)
         except Exception:
             var.set(False)
-        cb = ttk.Checkbutton(dlg, text='Enable anonymous telemetry (opt-in)', variable=var)
+        cb = ttk.Checkbutton(
+            dlg, text='Enable anonymous usage metrics (opt-in, local preference only)', variable=var)
         cb.pack(anchor='w', padx=12, pady=(8, 8))
 
         def _save():
@@ -7038,16 +7311,21 @@ class StartupManagerGUI(ctk.CTk):
                 if enable_telemetry:
                     enable_telemetry.set_opt_in(bool(var.get()))
                 self.refresh_dashboard()
-                messagebox.showinfo('Telemetry', 'Telemetry preference saved.', parent=dlg)
+                messagebox.showinfo('Diagnostics', 'Diagnostics preference saved.', parent=dlg)
             except Exception as e:
-                messagebox.showerror('Telemetry', f'Unable to save preference:\n{e}', parent=dlg)
+                messagebox.showerror('Diagnostics', f'Unable to save preference:\n{e}', parent=dlg)
             dlg.destroy()
 
         btns = ttk.Frame(dlg)
         btns.pack(side='bottom', fill='x', padx=12, pady=12)
         ttk.Button(btns, text='Save', style='Primary.TButton', command=_save).pack(side='right')
-        ttk.Button(btns, text='Cancel', style='Action.TButton', command=dlg.destroy).pack(side='right', padx=(0, 6))
+        ttk.Button(btns, text='Cancel', style='Action.TButton', command=dlg.destroy).pack(
+            side='right', padx=(0, 6))
         cb.focus_set()
+
+    def _show_telemetry_dialog(self):
+        """Legacy alias — opens Local Logs / Diagnostics panel."""
+        self._show_diagnostics_dialog()
 
     # ------------------------------------------------------------------
     # Startup tab actions
@@ -7068,6 +7346,10 @@ class StartupManagerGUI(ctk.CTk):
         sel = self.tree.selection()
         if not sel:
             return None
+        idx = self.tree.index(sel[0])
+        rows = getattr(self, '_startup_rows', None)
+        if rows and 0 <= idx < len(rows):
+            return dict(rows[idx])
         item = self.tree.item(sel[0])
         vals = item.get('values') or []
         return {
@@ -7076,6 +7358,136 @@ class StartupManagerGUI(ctk.CTk):
             'location': vals[2] if len(vals) > 2 else None,
             'command': vals[3] if len(vals) > 3 else None,
         }
+
+    def _startup_menu_state(self, ent):
+        """Return action availability for startup context menu."""
+        source = ((ent or {}).get('source') or '').lower()
+        can_enable = source in ('registry', 'disabled')
+        can_disable = source == 'registry'
+        cmd = (ent or {}).get('command') or ''
+        path = self._startup_extract_path(cmd)
+        can_open_file = bool(path and Path(path).exists())
+        can_open_reg = source == 'registry' and bool((ent or {}).get('location'))
+        can_open_task = source == 'task'
+        return {
+            'enable': (can_enable, 'Registry/disabled entries only'),
+            'disable': (can_disable, 'Registry Run keys only'),
+            'copy': (bool(cmd), 'No command recorded'),
+            'open_file': (can_open_file, 'Executable not found on disk'),
+            'open_loc': (can_open_reg or can_open_task,
+                         'Registry key or scheduled task only'),
+            'search': (bool((ent or {}).get('name')), 'No name to search'),
+            'details': (ent is not None, ''),
+        }
+
+    def _startup_extract_path(self, command):
+        if not command:
+            return None
+        cmd = command.strip()
+        if cmd.startswith('"'):
+            end = cmd.find('"', 1)
+            if end > 1:
+                return cmd[1:end]
+        parts = cmd.split()
+        return parts[0] if parts else None
+
+    def _on_startup_double_click(self, _event=None):
+        self._update_detail()
+        self._update_actions()
+
+    def _on_startup_right_click(self, event):
+        row = self.tree.identify_row(event.y)
+        if row:
+            self.tree.selection_set(row)
+            self.tree.focus(row)
+            self._update_detail()
+            self._update_actions()
+        ent = self._selected_entry()
+        states = self._startup_menu_state(ent)
+
+        menu = tk.Menu(
+            self, tearoff=0, bg=HEAD_BG, fg=TEXT,
+            activebackground=ACCENT_SOFT, activeforeground=TEXT,
+            relief='flat', borderwidth=0,
+        )
+
+        def _add(label, cmd, key):
+            ok, _why = states[key]
+            menu.add_command(label=label, command=cmd, state='normal' if ok else 'disabled')
+
+        _add('Enable selected', self.enable_selected, 'enable')
+        _add('Disable selected', self.disable_selected, 'disable')
+        menu.add_separator()
+        _add('Copy command', self.copy_command, 'copy')
+        _add('Open file location', self._startup_open_file_location, 'open_file')
+        _add('Open registry / Task Scheduler location', self._startup_open_source_location, 'open_loc')
+        menu.add_separator()
+        _add('Search online', self._startup_search_online, 'search')
+        _add('Show details', self._on_startup_double_click, 'details')
+
+        try:
+            menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            try:
+                menu.grab_release()
+            except Exception:
+                pass
+
+    def _startup_open_file_location(self):
+        ent = self._selected_entry()
+        if not ent:
+            return
+        path = self._startup_extract_path(ent.get('command'))
+        if not path:
+            messagebox.showinfo('Open location', 'No executable path found in command.')
+            return
+        p = Path(path)
+        if p.is_file():
+            try:
+                os.startfile(str(p.parent))
+            except OSError as e:
+                messagebox.showerror('Open location', str(e))
+        elif p.parent.is_dir():
+            os.startfile(str(p.parent))
+        else:
+            messagebox.showinfo('Open location', 'File location not found on disk.')
+
+    def _startup_open_source_location(self):
+        ent = self._selected_entry()
+        if not ent:
+            return
+        source = (ent.get('source') or '').lower()
+        if source == 'registry':
+            key = ent.get('location') or ''
+            if key:
+                try:
+                    self.clipboard_clear()
+                    self.clipboard_append(key)
+                except tk.TclError:
+                    pass
+            try:
+                os.startfile('regedit.exe')
+            except OSError as e:
+                messagebox.showerror('Registry', str(e))
+            self._set_status(f'Registry Editor opened — path copied: {key or "—"}')
+        elif source == 'task':
+            try:
+                os.startfile('taskschd.msc')
+            except OSError as e:
+                messagebox.showerror('Task Scheduler', str(e))
+            self._set_status('Task Scheduler opened — find the task by name in the list.')
+        else:
+            messagebox.showinfo('Open location', 'Available for registry and scheduled task entries.')
+
+    def _startup_search_online(self):
+        import urllib.parse
+        import webbrowser
+        ent = self._selected_entry()
+        if not ent:
+            return
+        name = ent.get('name') or 'startup program'
+        q = urllib.parse.quote(f'{name} startup program')
+        webbrowser.open(f'https://www.google.com/search?q={q}')
 
     def _update_detail(self):
         ent = self._selected_entry()

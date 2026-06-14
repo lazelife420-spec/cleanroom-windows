@@ -90,7 +90,8 @@ class CommandBar:
         on_preview,
         on_apply,
         on_restore,
-        more_items: list[tuple[str, callable]],
+        more_groups: list[tuple[str, list[tuple[str, callable]]]] | None = None,
+        more_items: list[tuple[str, callable]] | None = None,
     ):
         self._bg = bg
         self._card_bg = card_bg
@@ -99,6 +100,8 @@ class CommandBar:
         self._accent_dark = accent_dark
         self._accent_soft = accent_soft
         self._on_accent = on_accent
+        self._text = text
+        self._muted = accent_soft  # placeholder; overridden below if needed
         self._shell = ctk_theme.frame(parent, card_bg, corner_radius=10)
         self._shell.pack(fill='x', pady=(4, 0))
         inner = ctk_theme.frame(self._shell, card_bg)
@@ -129,10 +132,10 @@ class CommandBar:
         )
         self.tb_restore.pack(side='left', padx=(0, 6))
 
-        self._more_items = more_items
-        self._more_menu = tk.Menu(parent, tearoff=0)
-        for label, cmd in more_items:
-            self._more_menu.add_command(label=label, command=cmd)
+        if more_groups is None and more_items:
+            more_groups = [('More', list(more_items))]
+        self._more_groups = more_groups or []
+        self._more_popover = None
         self._more_btn = ctk_theme.button(
             inner, 'More ▾', self._show_more,
             fg_color=head_bg, hover_color=accent_soft, text_color=text, width=72, height=34,
@@ -145,17 +148,78 @@ class CommandBar:
         self._proof_flow_lbl = flow
         flow.pack(side='right', padx=(8, 0))
         self._dashboard_mode = False
+        self._popover_colors = dict(
+            bg=card_bg, head_bg=head_bg, accent=accent, accent_soft=accent_soft,
+            text=text, muted=text,
+        )
 
     def _show_more(self):
-        try:
-            x = self._more_btn.winfo_rootx()
-            y = self._more_btn.winfo_rooty() + self._more_btn.winfo_height()
-            self._more_menu.tk_popup(x, y)
-        finally:
+        if self._more_popover and self._more_popover.winfo_exists():
             try:
-                self._more_menu.grab_release()
+                self._more_popover.destroy()
             except Exception:
                 pass
+        pop = tk.Toplevel(self._more_btn.winfo_toplevel())
+        pop.overrideredirect(True)
+        pop.configure(bg=self._popover_colors['head_bg'])
+        pop.attributes('-topmost', True)
+        x = self._more_btn.winfo_rootx()
+        y = self._more_btn.winfo_rooty() + self._more_btn.winfo_height() + 2
+        pop.geometry(f'+{x}+{y}')
+        self._more_popover = pop
+
+        shell = ctk_theme.frame(pop, self._popover_colors['bg'], corner_radius=10,
+                              border_width=1)
+        shell.pack(padx=1, pady=1)
+        inner = ctk_theme.frame(shell, self._popover_colors['bg'])
+        inner.pack(padx=8, pady=8)
+
+        def _close(_e=None):
+            try:
+                pop.destroy()
+            except Exception:
+                pass
+
+        pop.bind('<Escape>', _close)
+        root = self._more_btn.winfo_toplevel()
+
+        def _outside_click(event):
+            if not pop.winfo_exists():
+                return
+            px, py = pop.winfo_rootx(), pop.winfo_rooty()
+            pw, ph = pop.winfo_width(), pop.winfo_height()
+            if px <= event.x_root <= px + pw and py <= event.y_root <= py + ph:
+                return
+            bx = self._more_btn.winfo_rootx()
+            by = self._more_btn.winfo_rooty()
+            bw, bh = self._more_btn.winfo_width(), self._more_btn.winfo_height()
+            if bx <= event.x_root <= bx + bw and by <= event.y_root <= by + bh:
+                return
+            _close()
+
+        pop.after(80, lambda: root.bind('<Button-1>', _outside_click, add='+'))
+        pop.bind('<Destroy>', lambda _e: root.unbind('<Button-1>'))
+
+        for gi, (section, items) in enumerate(self._more_groups):
+            if gi:
+                ctk_theme.frame(inner, self._popover_colors['head_bg'], height=1).pack(
+                    fill='x', pady=(6, 6))
+            ctk_theme.label(
+                inner, section.upper(), text_color=self._popover_colors['accent'],
+                font_size=9, weight='bold',
+            ).pack(anchor='w', padx=4, pady=(0, 4))
+            for label, cmd in items:
+                ctk_theme.button(
+                    inner, label,
+                    lambda c=cmd: (c(), _close()),
+                    fg_color='transparent',
+                    hover_color=self._popover_colors['accent_soft'],
+                    text_color=self._popover_colors['text'],
+                    anchor='w', height=30, width=220,
+                ).pack(fill='x', pady=1)
+
+        pop.focus_force()
+        pop.after(100, pop.focus_force)
 
     def set_context(self, tab_idx: int) -> None:
         """Emphasize primary actions for the active page."""
@@ -170,19 +234,18 @@ class CommandBar:
             self.tb_restore.configure(fg_color=self._accent, hover_color=self._accent_dark)
 
     def set_page_mode(self, *, dashboard: bool, tab_idx: int = 0) -> None:
-        """Home: compact secondary strip. Workspace: integrated workflow bar."""
+        """Home: compact secondary strip. Workspace: hide global bar (page CTAs own the job)."""
         self._dashboard_mode = dashboard
         if dashboard:
+            self._shell.pack(fill='x', pady=(4, 0))
             self._shell.configure(fg_color=self._bg)
             for btn in (self.tb_scan, self.tb_preview, self.tb_apply, self.tb_restore, self._more_btn):
                 btn.configure(fg_color=self._head_bg, hover_color=self._accent_soft, height=30)
             self._proof_flow_lbl.pack_forget()
         else:
-            self._shell.configure(fg_color=self._card_bg)
-            for btn in (self.tb_scan, self.tb_preview, self.tb_apply, self.tb_restore, self._more_btn):
-                btn.configure(height=34)
-            self._proof_flow_lbl.pack(side='right', padx=(8, 0))
-            self.set_context(tab_idx)
+            self._shell.pack_forget()
+            return
+        self.set_context(tab_idx)
 
     def set_compact_labels(self, compact: bool) -> None:
         self.tb_preview.configure(text='Preview' if compact else 'Preview Receipt')
@@ -348,9 +411,9 @@ def settings_sidebar_nav(
         btn = ctk_theme.button(
             inner, label, lambda k=key: on_select(k),
             fg_color='transparent', hover_color=accent, text_color=text_color,
-            anchor='w', height=34, width=width,
+            anchor='w', height=38, width=width,
         )
-        btn.pack(fill='x', pady=2)
+        btn.pack(fill='x', pady=4)
         buttons[key] = btn
     return buttons
 
@@ -449,7 +512,7 @@ def collapsible_section(
     """Collapsible sidebar group; returns (toggle_button, body_frame)."""
     accent_soft = accent_soft or sidebar_bg
     block = ctk_theme.frame(parent, sidebar_bg)
-    block.pack(fill='x', padx=4, pady=(0, 10))
+    block.pack(fill='x', padx=4, pady=(0, 12))
     state = {'open': start_open}
 
     header = ctk_theme.frame(block, accent_soft if start_open else sidebar_bg, corner_radius=8)
@@ -500,5 +563,5 @@ def sidebar_nav_button(
     return ctk_theme.button(
         parent, label, command,
         fg_color='transparent', hover_color=accent_soft, text_color=text_color,
-        anchor='w', height=36, corner_radius=8,
+        anchor='w', height=38, corner_radius=8,
     )
