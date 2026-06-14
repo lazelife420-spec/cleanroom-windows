@@ -81,6 +81,15 @@ def run_gate(app: gui.StartupManagerGUI) -> None:
         _fail(f'tray icon not running: {err}')
 
     CHECKS['tray_icon'] = True
+    start = time.time()
+    for target in (1.0, 3.0, 5.0):
+        while time.time() - start < target:
+            app.update_idletasks()
+            app.update()
+            time.sleep(0.1)
+        if not tray.check_health():
+            tray._log_diagnostics(f'gate@{int(target)}s')
+            _fail(f'tray not healthy after {int(target)}s: {tray.diagnostics_text()}')
     try:
         menu = tray._build_menu()
         CHECKS['tray_menu'] = menu is not None

@@ -603,11 +603,33 @@ class StartupManagerGUI(ctk.CTk):
         msg = reason.strip() or 'Tray icon unavailable.'
         self._tray_warning = ctk_theme.frame(host, '#3F1D1D', corner_radius=8)
         self._tray_warning.pack(fill='x', pady=(0, 4))
+        body = ctk_theme.frame(self._tray_warning, '#3F1D1D')
+        body.pack(fill='x', padx=12, pady=8)
         ctk_theme.label(
-            self._tray_warning,
-            f'Tray icon unavailable. Cleanroom is still running normally. ({msg})',
+            body,
+            'Tray icon could not stay running. Cleanroom will keep running in the main window.',
             text_color='#FCA5A5', font_size=9, wraplength=900, justify='left',
-        ).pack(anchor='w', padx=12, pady=8)
+        ).pack(anchor='w')
+        if msg:
+            ctk_theme.label(
+                body, msg, text_color='#FCA5A5', font_size=9, wraplength=900, justify='left',
+            ).pack(anchor='w', pady=(4, 0))
+
+        def _copy_diag():
+            tray = getattr(self, '_tray', None)
+            text = tray.diagnostics_text() if tray and hasattr(tray, 'diagnostics_text') else msg
+            try:
+                self.clipboard_clear()
+                self.clipboard_append(text)
+                self._set_status('Tray diagnostics copied.')
+            except tk.TclError:
+                pass
+
+        ctk_theme.button(
+            body, 'Copy diagnostics', _copy_diag,
+            fg_color=HEAD_BG, hover_color=ACCENT_SOFT, text_color=TEXT,
+            height=24, width=120, corner_radius=8,
+        ).pack(anchor='w', pady=(8, 0))
         logger.warning('Tray unavailable: %s', msg)
 
     def _is_cleaner_scanning(self) -> bool:
@@ -789,14 +811,18 @@ class StartupManagerGUI(ctk.CTk):
             self._tray = TrayController(self)
             if not self._tray.start():
                 err = self._tray.last_error or 'Tray icon could not start'
+                diag = self._tray.diagnostics_text() if hasattr(self._tray, 'diagnostics_text') else err
                 self._tray = None
                 if attempt < 2:
                     logger.warning('Tray start retry %s: %s', attempt + 1, err)
                     self.after(1500, lambda: self._init_tray(attempt + 1))
                     return
-                self._show_tray_unavailable(err)
+                self._show_tray_unavailable(diag)
                 return
             logger.info('Tray icon active')
+            self.after(1000, lambda: self._watch_tray_health(1))
+            self.after(3000, lambda: self._watch_tray_health(3))
+            self.after(5000, lambda: self._watch_tray_health(5))
         except Exception as exc:
             self._tray = None
             if attempt < 2:
@@ -805,6 +831,22 @@ class StartupManagerGUI(ctk.CTk):
                 return
             self._show_tray_unavailable(str(exc))
             logger.exception('Tray init failed')
+
+    def _watch_tray_health(self, seconds: int):
+        tray = getattr(self, '_tray', None)
+        if tray is None:
+            return
+        tray._log_diagnostics(f'health@{seconds}s')
+        if tray.check_health():
+            return
+        err = tray.diagnostics_text()
+        logger.error('Tray died within %ss: %s', seconds, err)
+        try:
+            tray.stop()
+        except Exception:
+            pass
+        self._tray = None
+        self._show_tray_unavailable(err)
 
     def _on_window_close(self):
         tray = getattr(self, '_tray', None)

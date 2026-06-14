@@ -102,14 +102,33 @@ On **Cleaner, Archive, Proof Ledger, Startup, Uninstaller, Restore**:
 
 ## Tray (real Windows notification area)
 
-- [ ] Tray icon **visible** in the notification area after launch.
-- [ ] Right-click opens menu: Open Cleanroom, Run Scan (or disabled while scanning), receipt/proof actions, Open Archive Folder, **Tools** submenu, **Window** submenu, Quit.
-- [ ] **Hide to tray** withdraws main window; **Show** / **Open** restores it.
-- [ ] **Quit** removes tray icon cleanly.
-- [ ] Relaunch creates **one** icon only (no duplicate pile).
-- [ ] Second instance does not spawn duplicate tray icons.
-- [ ] No `_running` / pystray traceback on quit.
-- [ ] Menu actions (Latest Receipt, Proof Pack, etc.) do not crash.
+**PASS requires:**
+
+- Cleanroom icon visible beside clock **or** inside hidden-icons overflow
+- Right-click opens menu (Open, Scan, receipt/proof actions, Tools, Window, Quit)
+- **Hide to tray** withdraws main window; **Show** / **Open** restores it
+- **Quit** removes tray icon cleanly
+- Relaunch creates **exactly one** icon (no duplicate pile)
+- Second instance does not spawn duplicate tray icons
+- No `_running` / pystray traceback on quit
+- Menu actions (Latest Receipt, Proof Pack, etc.) do not crash
+
+**FAIL if:**
+
+- Icon flashes then disappears
+- Icon is not visible anywhere in the notification area / overflow
+- Menu cannot open
+- Quit leaves orphan icon
+- Relaunch creates duplicate icons
+
+Manual checklist:
+
+- [ ] Tray icon **visible** after launch (not flash-then-gone)
+- [ ] Right-click opens full product menu
+- [ ] **Hide to tray** / **Show** work
+- [ ] **Quit** removes icon
+- [ ] Relaunch = one icon only
+- [ ] No pystray traceback in console
 
 ## Dialogs
 

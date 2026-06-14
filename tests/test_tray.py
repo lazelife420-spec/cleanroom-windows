@@ -64,14 +64,18 @@ def test_tray_callbacks_schedule_app_actions(monkeypatch):
     assert 'quit' in app.calls
 
 
-def test_tray_preview_enabled_when_candidates_checked():
+def test_tray_preview_skips_without_selection():
     app = _FakeApp()
+    app.preview_cleanup_receipt = lambda: app.calls.append('preview')
     app.cleanup_items = [{'path': '/x'}]
-    app.cleanup_selected = {0}
-    tray = TrayController(app)
-    assert tray._can_preview_receipt() is True
     app.cleanup_selected = set()
-    assert tray._can_preview_receipt() is False
+    tray = TrayController(app)
+    tray._on_preview_receipt(None, None)
+    assert 'preview' not in app.calls
+
+    app.cleanup_selected = {0}
+    tray._on_preview_receipt(None, None)
+    assert 'preview' in app.calls
 
 
 def test_tray_stop_without_running_attr():
@@ -137,6 +141,14 @@ def test_tray_menu_has_required_actions():
             labels.append(str(text))
     assert 'Open Cleanroom' in TrayController.MENU_LABELS
     assert 'Quit Cleanroom' in TrayController.MENU_LABELS
+
+
+def test_tray_diagnostics_snapshot():
+    app = _FakeApp()
+    tray = TrayController(app)
+    text = tray.diagnostics_text()
+    assert 'CLEANROOM TRAY DIAGNOSTICS' in text
+    assert 'pystray_import' in text
 
 
 def test_tray_init_failure_does_not_crash_gui_init(monkeypatch):
