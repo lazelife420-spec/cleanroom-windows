@@ -6,6 +6,18 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+# Headless CI may lack tk; skip viewer-instantiation tests gracefully.
+_HAS_DISPLAY = True
+try:
+    import customtkinter as ctk  # noqa: F401
+    _root = ctk.CTk()
+    _root.destroy()
+except Exception:
+    _HAS_DISPLAY = False
+
+_needs_display = pytest.mark.skipif(
+    not _HAS_DISPLAY, reason='requires a display (tk available)')
+
 
 class TestAppCLI:
     def test_parse_args_no_flags(self):
@@ -116,6 +128,7 @@ class TestParseThenDisplay:
         assert s.trust_display == 'Unknown'
 
 
+@_needs_display
 class TestCustodySummary:
     """Tests for the _build_custody_summary_text output."""
 
@@ -202,8 +215,9 @@ class TestCustodySummary:
         app.destroy()
 
 
+@_needs_display
 class TestViewerNoTk:
-    """Tests that do NOT require a display — state/logic only."""
+    """Tests that require importing ReceiptViewerApp (needs tk)."""
 
     def test_viewer_app_can_instantiate_minimal(self, monkeypatch):
         """Smoke: ReceiptViewerApp.__init__ without launching mainloop."""
