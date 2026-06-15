@@ -1,6 +1,7 @@
 """Windows notification-area tray for Cleanroom — optional, failure-safe."""
 from __future__ import annotations
 
+import atexit
 import logging
 import os
 import sys
@@ -15,6 +16,7 @@ logger = logging.getLogger(__name__)
 _active_tray: 'TrayController | None' = None
 _keepalive: list = []
 _start_lock = threading.Lock()
+_TRAY_ICON_NAME = 'Cleanroom'
 
 
 def get_active_tray() -> 'TrayController | None':
@@ -33,6 +35,9 @@ def shutdown_all_trays() -> None:
     _active_tray = None
 
 
+atexit.register(shutdown_all_trays)
+
+
 def _resource_path(name):
     here = Path(sys.executable).parent if getattr(sys, 'frozen', False) else Path(__file__).resolve().parent.parent
     candidate = here / name
@@ -41,10 +46,33 @@ def _resource_path(name):
     return Path(getattr(sys, '_MEIPASS', str(Path(__file__).resolve().parent.parent))) / name
 
 
+def _tray_target_size() -> int:
+    if sys.platform.startswith('win'):
+        try:
+            import ctypes
+            dpi = int(ctypes.windll.user32.GetDpiForSystem())
+            return 32 if dpi >= 120 else 16
+        except Exception:
+            pass
+    return 32
+
+
+def _flatten_tray_image(img):
+    """Windows notification area renders transparent margins as a white box."""
+    from PIL import Image
+
+    bg = (15, 20, 25, 255)
+    flat = Image.new('RGBA', img.size, bg)
+    if img.mode != 'RGBA':
+        img = img.convert('RGBA')
+    return Image.alpha_composite(flat, img)
+
+
 def _load_tray_image():
     """Return (PIL image copy, asset path or '', used_fallback)."""
     from PIL import Image
 
+    target = _tray_target_size()
     candidates = (
         brand.ICON_TRAY_PNG_PATH,
         brand.ICON_PNG_PATH,
@@ -61,15 +89,14 @@ def _load_tray_image():
         try:
             with Image.open(path) as img:
                 img = img.convert('RGBA') if img.mode != 'RGBA' else img
-                if max(img.size) > 64:
-                    img = img.resize((64, 64), Image.LANCZOS)
-                elif max(img.size) < 32:
-                    img = img.resize((32, 32), Image.LANCZOS)
+                if max(img.size) != target or min(img.size) != target:
+                    img = img.resize((target, target), Image.LANCZOS)
+                img = _flatten_tray_image(img)
                 return img.copy(), str(path), False
         except Exception as exc:
             logger.debug('Tray icon load failed for %s: %s', path, exc)
             continue
-    fallback = Image.new('RGBA', (32, 32), (34, 197, 94, 255))
+    fallback = Image.new('RGBA', (target, target), (34, 197, 94, 255))
     return fallback, '', True
 
 
@@ -244,6 +271,7 @@ class TrayController:
         if self._icon is not None:
             logger.info('Stopping prior icon on controller=%s before restart', id(self))
             self.stop()
+            time.sleep(0.35)
 
         self._stopping = False
         self._started = False
@@ -300,7 +328,7 @@ class TrayController:
         menu = self._build_menu()
         self._tray_menu = menu
 
-        icon_name = f'Cleanroom-{os.getpid()}'
+        icon_name = _TRAY_ICON_NAME
         icon = pystray.Icon(
             icon_name,
             image,

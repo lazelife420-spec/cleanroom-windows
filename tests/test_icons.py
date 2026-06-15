@@ -36,6 +36,14 @@ def test_icon_assets_exist_and_sizes():
 
     tray = Image.open(brand.ICON_TRAY_PNG_PATH)
     assert tray.size == (32, 32)
+    assert tray.mode == 'RGBA'
+
+    from ui.tray import _load_tray_image
+    loaded, _path, _fb = _load_tray_image()
+    assert loaded.mode == 'RGBA'
+    # Windows tray must not have transparent margins (renders as white box).
+    assert loaded.getpixel((0, 0))[3] == 255
+    assert loaded.getpixel((loaded.size[0] - 1, loaded.size[1] - 1))[3] == 255
 
     sizes = _ico_sizes(brand.ICON_ICO_PATH)
     assert (16, 16) in sizes

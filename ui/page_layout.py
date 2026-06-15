@@ -105,27 +105,23 @@ class EmptyStateCard:
 def _hide_widget(widget) -> None:
     if widget is None:
         return
-    try:
-        widget.pack_forget()
-        return
-    except Exception:
-        pass
-    try:
-        widget.grid_remove()
-    except Exception:
-        pass
+    for forget in (widget.pack_forget, widget.grid_remove, widget.place_forget):
+        try:
+            forget()
+        except Exception:
+            pass
 
 
 def _show_widget_fill(widget) -> None:
     if widget is None:
         return
     try:
-        widget.pack(fill='both', expand=True)
+        widget.grid(row=0, column=0, sticky='nsew')
         return
     except Exception:
         pass
     try:
-        widget.grid(row=0, column=0, sticky='nsew')
+        widget.pack(fill='both', expand=True)
     except Exception:
         pass
 

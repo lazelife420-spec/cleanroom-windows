@@ -48,9 +48,12 @@ def _shield_points(w: int, h: int) -> list[tuple[float, float]]:
     ]
 
 
-def render_icon(size: int) -> Image.Image:
+def render_icon(size: int, *, opaque_bg: bool = False) -> Image.Image:
     """Rasterize the custody-shield icon; simplify detail below 48px."""
-    img = Image.new('RGBA', (size, size), (0, 0, 0, 0))
+    if opaque_bg:
+        img = Image.new('RGBA', (size, size), BG + (255,))
+    else:
+        img = Image.new('RGBA', (size, size), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
     pad = max(1, size // 32)
     radius = max(2, size // 5)
@@ -174,7 +177,7 @@ def main() -> int:
     ico_path = BRAND / 'cleanroom-icon.ico'
 
     frames[-1].save(png_path, format='PNG', optimize=True)
-    render_icon(32).save(tray_path, format='PNG', optimize=True)
+    render_icon(32, opaque_bg=True).save(tray_path, format='PNG', optimize=True)
     write_ico(ico_path, frames)
 
     embedded = verify_ico(ico_path)
