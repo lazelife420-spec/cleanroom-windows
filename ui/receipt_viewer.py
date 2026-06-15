@@ -12,10 +12,15 @@ class ReceiptViewerDialog(tk.Toplevel):
     """Native receipt panel with optional external open."""
 
     def __init__(self, parent, text, title='Cleanroom Receipt', receipt_path=None,
-                 preview=False, bg='#1a1a2e', card='#16213e', text_fg='#eaeaea'):
+                 preview=False, bg='#1a1a2e', card='#16213e', text_fg='#eaeaea',
+                 receipt_available=False, open_in_receipt=None):
         super().__init__(parent)
         self._receipt_path = Path(receipt_path) if receipt_path else None
         self._text_body = text or ''
+        # Optional hand-off to the standalone RECEIPT proof viewer. The button
+        # stays hidden unless RECEIPT is available AND we have a file on disk.
+        self._open_in_receipt_cb = open_in_receipt
+        self._receipt_available = bool(receipt_available)
         self.configure(bg=bg)
         self.title(title)
         self.geometry('620x520')
@@ -55,6 +60,10 @@ class ReceiptViewerDialog(tk.Toplevel):
                        command=self._open_file).pack(side='left', padx=(6, 0))
             ttk.Button(btns, text='Open Receipt Folder',
                        command=self._open_folder).pack(side='left', padx=(6, 0))
+            # Hidden entirely unless RECEIPT is available — no disabled button.
+            if self._receipt_available and self._open_in_receipt_cb:
+                ttk.Button(btns, text='Open in RECEIPT',
+                           command=self._open_in_receipt).pack(side='left', padx=(6, 0))
         ttk.Button(btns, text='Close Receipt', command=self.destroy).pack(side='right')
 
     def _copy(self):
@@ -86,6 +95,23 @@ class ReceiptViewerDialog(tk.Toplevel):
         except OSError as e:
             messagebox.showerror('Receipt', f'Unable to open folder:\n{e}')
 
+    def _open_in_receipt(self):
+        if not self._open_in_receipt_cb or not self._receipt_path:
+            return
+        ok, err = self._open_in_receipt_cb(str(self._receipt_path))
+        if not ok:
+            detail = err or 'RECEIPT could not be opened.'
+            messagebox.showinfo(
+                'Open in RECEIPT',
+                f"{detail}\n\n"
+                "Cleanroom's built-in receipt view is still fully available here. "
+                "RECEIPT is an optional, local-only proof viewer — nothing is "
+                "uploaded.")
 
-def show_receipt(parent, text, receipt_path=None, preview=False, **kwargs):
-    return ReceiptViewerDialog(parent, text, receipt_path=receipt_path, preview=preview, **kwargs)
+
+def show_receipt(parent, text, receipt_path=None, preview=False,
+                 receipt_available=False, open_in_receipt=None, **kwargs):
+    return ReceiptViewerDialog(
+        parent, text, receipt_path=receipt_path, preview=preview,
+        receipt_available=receipt_available, open_in_receipt=open_in_receipt,
+        **kwargs)

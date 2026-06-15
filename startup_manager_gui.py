@@ -46,6 +46,11 @@ except Exception:
     show_receipt = None
 
 try:
+    import receipt_bridge
+except Exception:
+    receipt_bridge = None
+
+try:
     import startup_manager
 except Exception:
     startup_manager = None
@@ -4244,8 +4249,12 @@ class StartupManagerGUI(ctk.CTk):
             messagebox.showerror('Receipt', f'Unable to read receipt:\n{e}')
             return
         if show_receipt:
+            avail = bool(receipt_bridge and receipt_bridge.is_available())
             show_receipt(self, body, receipt_path=path, preview=preview,
-                         bg=BG, card=CARD_BG, text_fg=TEXT)
+                         bg=BG, card=CARD_BG, text_fg=TEXT,
+                         receipt_available=avail,
+                         open_in_receipt=(receipt_bridge.open_receipt
+                                          if receipt_bridge else None))
         else:
             self._show_text_dialog('Cleanroom Receipt', body)
 
@@ -5449,8 +5458,12 @@ def open_receipt_standalone(path_str):
     root.withdraw()
     try:
         if show_receipt:
+            avail = bool(receipt_bridge and receipt_bridge.is_available())
             dlg = show_receipt(root, body, receipt_path=path,
-                               bg=BG, card=CARD_BG, text_fg=TEXT)
+                               bg=BG, card=CARD_BG, text_fg=TEXT,
+                               receipt_available=avail,
+                               open_in_receipt=(receipt_bridge.open_receipt
+                                                if receipt_bridge else None))
 
             def _close():
                 try:
