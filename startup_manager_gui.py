@@ -425,6 +425,7 @@ class StartupManagerGUI(ctk.CTk):
         self._cleaner_error = ''
         self._scan_stopped = False
         self._scan_cancel_event = threading.Event()
+        self._scan_skip_folders: set[str] = set()
         self._scan_progress: dict = {}
         self._scan_progress_job = None
         self._scan_diag: dict = {}
@@ -708,10 +709,16 @@ class StartupManagerGUI(ctk.CTk):
                 style='Primary.TButton' if state == RECEIPT_READY else 'Action.TButton')
         count = len(self.cleanup_items or [])
         show_actions = count > 0 and state not in (LOADING, SCAN_STOPPED)
-        for attr in ('cleaner_preview_btn', 'apply_clean_btn'):
-            if hasattr(self, attr):
-                getattr(self, attr).config(state='normal' if show_actions else 'disabled')
         scanning = state == LOADING
+        for attr in ('cleaner_preview_btn', 'apply_clean_btn'):
+            if not hasattr(self, attr):
+                continue
+            btn = getattr(self, attr)
+            if scanning:
+                btn.pack_forget()
+            else:
+                btn.pack(side='left', padx=(8, 0))
+                btn.config(state='normal' if show_actions else 'disabled')
         if hasattr(self, 'scan_btn'):
             self.scan_btn.config(
                 state='disabled' if scanning else 'normal',
@@ -722,6 +729,23 @@ class StartupManagerGUI(ctk.CTk):
                 self.stop_scan_btn.pack(side='left', padx=(8, 0))
             else:
                 self.stop_scan_btn.pack_forget()
+        if hasattr(self, 'skip_scan_folder_btn'):
+            slow = bool((getattr(self, '_scan_progress', None) or {}).get('slow_folder'))
+            if scanning and slow:
+                self.skip_scan_folder_btn.pack(side='left', padx=(8, 0))
+            else:
+                self.skip_scan_folder_btn.pack_forget()
+        if hasattr(self, '_scan_loading_stop') and hasattr(self, 'skip_scan_folder_btn'):
+            if scanning:
+                self._scan_loading_stop.pack(side='left', padx=(0, 8))
+                slow = bool((getattr(self, '_scan_progress', None) or {}).get('slow_folder'))
+                if slow:
+                    self.skip_scan_folder_btn.pack(side='left')
+                else:
+                    self.skip_scan_folder_btn.pack_forget()
+            else:
+                self._scan_loading_stop.pack_forget()
+                self.skip_scan_folder_btn.pack_forget()
         for attr in ('scan_btn', 'dashboard_primary_btn'):
             if hasattr(self, attr) and attr != 'scan_btn':
                 getattr(self, attr).config(state='disabled' if scanning else 'normal')
@@ -731,8 +755,30 @@ class StartupManagerGUI(ctk.CTk):
             self._update_cleanup_empty_state()
         if scanning:
             self._sync_scan_progress_ui()
+        self._sync_global_actions(state, checked, scan_done)
         self._update_brand_identity()
         self._refresh_tray_menu()
+
+    def _sync_global_actions(self, home_state=None, checked=0, scan_done=False):
+        """Keep hidden command-bar buttons aligned with Home/Cleaner state."""
+        if home_state is None:
+            home_state = getattr(self, '_home_page_state', IDLE_READY)
+        scanning = home_state == LOADING or getattr(self, '_cleaner_loading', False)
+        can_preview = (
+            not scanning and scan_done and checked > 0
+            and home_state in (RECEIPT_READY, RESULTS_READY)
+        )
+        can_archive = can_preview and home_state == RECEIPT_READY
+        for attr, enabled in (
+            ('tb_scan', not scanning),
+            ('tb_preview', can_preview),
+            ('tb_apply', can_archive),
+        ):
+            if hasattr(self, attr):
+                try:
+                    getattr(self, attr).configure(state='normal' if enabled else 'disabled')
+                except Exception:
+                    pass
 
     def _sync_home_state(self, *, custody_missing: int = 0):
         """Align Home hero with the same scan lifecycle as Cleaner."""
@@ -771,58 +817,55 @@ class StartupManagerGUI(ctk.CTk):
             on_home = False
         if on_home or self._cleaner_loading:
             self._set_status(status)
-        if state == RECEIPT_READY and hasattr(self, 'dashboard_primary_btn'):
-            self.dashboard_primary_btn.configure(
-                text='Preview Receipt', command=self.preview_cleanup_receipt)
-            if hasattr(self, 'dashboard_preview_btn'):
-                self.dashboard_preview_btn.config(state='normal')
-            if hasattr(self, 'dashboard_archive_btn'):
-                self.dashboard_archive_btn.config(state='normal')
-            self.dashboard_secondary_btn.configure(
-                text='Open Cleaner', command=lambda: self._navigate_to_tab(3))
-        elif state == RESULTS_READY and hasattr(self, 'dashboard_primary_btn'):
-            self.dashboard_primary_btn.configure(
-                text='Open Cleaner', command=lambda: self._navigate_to_tab(3))
-            if hasattr(self, 'dashboard_preview_btn'):
-                self.dashboard_preview_btn.config(state='normal')
-            if hasattr(self, 'dashboard_archive_btn'):
-                self.dashboard_archive_btn.config(state='normal')
-            self.dashboard_secondary_btn.configure(
-                text='Preview Receipt', command=self.preview_cleanup_receipt)
-        elif state == EMPTY_DONE and hasattr(self, 'dashboard_primary_btn'):
-            self.dashboard_primary_btn.configure(
-                text='Scan Again', command=self.refresh_cleanup)
-            if hasattr(self, 'dashboard_preview_btn'):
-                self.dashboard_preview_btn.config(state='disabled')
-            if hasattr(self, 'dashboard_archive_btn'):
-                self.dashboard_archive_btn.config(state='disabled')
-            self.dashboard_secondary_btn.configure(
-                text='Open Activity', command=lambda: self._navigate_to_tab(1))
-        elif custody_missing and hasattr(self, 'dashboard_primary_btn'):
-            self.dashboard_primary_btn.configure(
-                text='Review custody', command=lambda: self._navigate_to_tab(1))
-            if hasattr(self, 'dashboard_preview_btn'):
-                self.dashboard_preview_btn.config(state='disabled')
-            if hasattr(self, 'dashboard_archive_btn'):
-                self.dashboard_archive_btn.config(state='disabled')
-            self.dashboard_secondary_btn.configure(
-                text='Open Archive', command=lambda: self._navigate_to_tab(6))
-        elif hasattr(self, 'dashboard_primary_btn'):
-            self.dashboard_primary_btn.configure(
-                text='Scan Now', command=self.refresh_cleanup)
-            if hasattr(self, 'dashboard_preview_btn'):
-                self.dashboard_preview_btn.config(state='disabled')
-            if hasattr(self, 'dashboard_archive_btn'):
-                self.dashboard_archive_btn.config(state='disabled')
-            self.dashboard_secondary_btn.configure(
-                text='Open Activity', command=lambda: self._navigate_to_tab(1))
-        if self._cleaner_loading and hasattr(self, 'dashboard_preview_btn'):
-            for attr in ('dashboard_preview_btn', 'dashboard_archive_btn', 'dashboard_primary_btn'):
+        if not hasattr(self, 'dashboard_primary_btn'):
+            return
+        scanning = self._cleaner_loading
+        checked_n = len(self.cleanup_selected or set()) if scan_done else 0
+        if scanning:
+            for attr in ('dashboard_primary_btn', 'dashboard_preview_btn', 'dashboard_archive_btn'):
                 if hasattr(self, attr):
                     getattr(self, attr).config(state='disabled')
-            if hasattr(self, 'dashboard_primary_btn'):
-                self.dashboard_primary_btn.configure(text='Scanning…')
-        self.preview_receipt_btn = getattr(self, 'dashboard_primary_btn', None)
+            self.dashboard_primary_btn.configure(text='Scanning…')
+            self._sync_global_actions(LOADING, 0, False)
+            return
+        if state == RECEIPT_READY:
+            self.dashboard_primary_btn.configure(
+                text='Review Candidates', command=lambda: self._navigate_to_tab(3))
+            self.dashboard_preview_btn.config(state='normal')
+            self.dashboard_archive_btn.config(
+                state='normal' if checked_n > 0 else 'disabled')
+            self.dashboard_secondary_btn.configure(
+                text='Proof Ledger', command=lambda: self._navigate_to_tab(1))
+        elif state == RESULTS_READY:
+            self.dashboard_primary_btn.configure(
+                text='Review Candidates', command=lambda: self._navigate_to_tab(3))
+            self.dashboard_preview_btn.config(state='disabled')
+            self.dashboard_archive_btn.config(state='disabled')
+            self.dashboard_secondary_btn.configure(
+                text='Proof Ledger', command=lambda: self._navigate_to_tab(1))
+        elif state == EMPTY_DONE:
+            self.dashboard_primary_btn.configure(
+                text='Scan Again', command=self.refresh_cleanup)
+            self.dashboard_preview_btn.config(state='disabled')
+            self.dashboard_archive_btn.config(state='disabled')
+            self.dashboard_secondary_btn.configure(
+                text='Proof Ledger', command=lambda: self._navigate_to_tab(1))
+        elif custody_missing:
+            self.dashboard_primary_btn.configure(
+                text='Review custody', command=lambda: self._navigate_to_tab(1))
+            self.dashboard_preview_btn.config(state='disabled')
+            self.dashboard_archive_btn.config(state='disabled')
+            self.dashboard_secondary_btn.configure(
+                text='Open Archive', command=lambda: self._navigate_to_tab(6))
+        else:
+            self.dashboard_primary_btn.configure(
+                text='Scan Now', command=self.refresh_cleanup)
+            self.dashboard_preview_btn.config(state='disabled')
+            self.dashboard_archive_btn.config(state='disabled')
+            self.dashboard_secondary_btn.configure(
+                text='Proof Ledger', command=lambda: self._navigate_to_tab(1))
+        self.preview_receipt_btn = self.dashboard_preview_btn
+        self._sync_global_actions(state, checked_n, scan_done)
         self._update_brand_identity()
 
     def _toggle_sidebar_collapsed(self):
@@ -1977,12 +2020,10 @@ class StartupManagerGUI(ctk.CTk):
         hero_inner.pack(fill='x', padx=12, pady=8)
         title_row = ttk.Frame(hero_inner, style='Card.TFrame')
         title_row.pack(fill='x')
-        ttk.Label(title_row, text='Home', font=('Segoe UI', 15, 'bold'),
-                  background=CARD_BG).pack(side='left')
         self.dashboard_status_lbl = tk.Label(
             title_row, text='Ready to scan', bg=CARD_BG, fg=PROOF,
-            font=('Segoe UI', 11, 'bold'))
-        self.dashboard_status_lbl.pack(side='left', padx=(12, 0))
+            font=('Segoe UI', 13, 'bold'))
+        self.dashboard_status_lbl.pack(side='left')
         self.dashboard_msg_lbl = ttk.Label(
             title_row, text='', style='Info.TLabel')
         self.dashboard_msg_lbl.pack(side='left', padx=(8, 0))
@@ -2004,7 +2045,7 @@ class StartupManagerGUI(ctk.CTk):
             command=lambda: self._navigate_to_tab(1))
         self.dashboard_secondary_btn.pack(side='left', padx=(8, 0))
         self._add_tooltip(self.dashboard_primary_btn, 'Scan configured folders for cleanup candidates.')
-        self.preview_receipt_btn = self.dashboard_primary_btn
+        self.preview_receipt_btn = self.dashboard_preview_btn
 
         cards = ttk.Frame(self.optimizer_tab, style='Content.TFrame')
         cards.grid(row=1, column=0, sticky='ew', padx=10, pady=(0, 4))
@@ -2342,7 +2383,7 @@ class StartupManagerGUI(ctk.CTk):
             side='left', padx=(0, 10))
         ttk.Button(qa_primary, text='↩ Restore Selected', style='Primary.TButton',
                    command=self._archive_restore_selected).pack(side='left', padx=(0, 6))
-        self._archive_action_btns.append(qa_primary.winfo_children()[-1])
+        self._archive_restore_btn = qa_primary.winfo_children()[-1]
         _archive_btn(qa_primary, 'Open Archive Folder', self.open_archive_folder).pack(
             side='left', padx=(0, 6))
         _archive_btn(qa_primary, 'Refresh', self.refresh_archive_browser, refresh=True).pack(
@@ -2658,6 +2699,12 @@ class StartupManagerGUI(ctk.CTk):
 
     def preview_cleanup_receipt(self):
         """Draft Cleanroom Receipt for checked candidates — before any archive."""
+        if getattr(self, '_cleaner_loading', False):
+            messagebox.showinfo(
+                'Preview Receipt',
+                'Scan is still running. Wait for scan to finish before previewing.',
+            )
+            return
         if receipts_module is None:
             messagebox.showerror('Preview Receipt', 'Receipts module unavailable.')
             return
@@ -2685,12 +2732,16 @@ class StartupManagerGUI(ctk.CTk):
         def _open_preview():
             try:
                 if show_receipt:
-                    show_receipt(self, preview, title='Cleanroom Receipt — Preview',
-                                 preview=True, bg=BG, card=CARD_BG, text_fg=TEXT)
+                    show_receipt(
+                        self, preview, title='Cleanroom Receipt — Cleaner Preview',
+                        preview=True, module='Cleaner', action='Preview',
+                        action_key='cleaner_preview',
+                        bg=BG, card=CARD_BG, text_fg=TEXT,
+                    )
                 else:
                     raise RuntimeError('receipt viewer unavailable')
             except Exception:
-                self._show_text_dialog('Cleanroom Receipt — Preview', preview)
+                self._show_text_dialog('Cleanroom Receipt — Cleaner Preview', preview)
 
         self._play_receipt_animation(
             'RECEIPT GENERATED',
@@ -3062,7 +3113,8 @@ class StartupManagerGUI(ctk.CTk):
             command=lambda: self._set_cleanup_selection(False))
         self.select_none_btn.pack(side='left', padx=6)
         self.cleanup_progress = ttk.Progressbar(tools, mode='indeterminate', length=160)
-        self.cleanup_progress.pack(side='right')
+        # Legacy spinner — hidden; premium scan panel is the sole scan surface.
+        self.cleanup_progress.pack_forget()
 
         body = ttk.Frame(self.cleanup_tab, style='Content.TFrame')
         body.grid(row=3, column=0, sticky='nsew', padx=10, pady=(0, 4))
@@ -3197,9 +3249,14 @@ class StartupManagerGUI(ctk.CTk):
         self._scan_counter_size.grid(row=1, column=0, padx=8, pady=(6, 0))
         self._scan_counter_elapsed = ttk.Label(counters, text='Elapsed: 0s', style='Badge.TLabel')
         self._scan_counter_elapsed.grid(row=1, column=1, padx=8, pady=(6, 0))
+        scan_btn_row = ttk.Frame(scan_inner, style='Card.TFrame')
+        scan_btn_row.pack(anchor='center', pady=(12, 0))
         self._scan_loading_stop = ttk.Button(
-            scan_inner, text='Stop Scan', style='Action.TButton', command=self.stop_scan)
-        self._scan_loading_stop.pack(anchor='center', pady=(12, 0))
+            scan_btn_row, text='Stop Scan', style='Action.TButton', command=self.stop_scan)
+        self._scan_loading_stop.pack(side='left', padx=(0, 8))
+        self.skip_scan_folder_btn = ttk.Button(
+            scan_btn_row, text='Skip Folder', style='Action.TButton', command=self.skip_scan_folder)
+        self.skip_scan_folder_btn.pack(side='left')
         self._update_cleanup_empty_state()
 
         status = ttk.Frame(self.cleanup_tab)
@@ -3299,18 +3356,64 @@ class StartupManagerGUI(ctk.CTk):
             self.cleanup_tree.selection_set(row)
             self.cleanup_tree.focus(row)
         self._on_cleanup_select()
-        has = self._selected_cleanup_index() is not None
+        idx = self._selected_cleanup_index()
+        has = idx is not None
+        checked = idx in self.cleanup_selected if idx is not None else False
+        scan_done = getattr(self, '_scan_session_done', False)
+        can_archive = (
+            scan_done and bool(self.cleanup_selected)
+            and not getattr(self, '_cleaner_loading', False)
+        )
         self._show_row_popover(
             event.x_root, event.y_root,
             [
-                ('Open location', self._cleanup_open_location, has),
+                ('Check selected' if not checked else 'Uncheck selected',
+                 lambda: self._toggle_cleanup_index(idx) if idx is not None else None, has),
+                ('Select all in category', self._cleanup_select_in_category, has),
+                ('Open file location', self._cleanup_open_location, has),
                 ('Copy path', self._cleanup_copy_path, has),
-                ('Exclude', self._cleanup_exclude_selected, has),
-                ('Preview receipt', self._cleanup_preview_single, has),
+                ('Copy item details', self._cleanup_copy_item_details, has),
+                ('Preview receipt for selection', self._cleanup_preview_single, has),
+                ('Review risk/details', self._on_cleanup_select, has),
+                ('Exclude from future scans', self._cleanup_exclude_selected, has),
+                ('Archive selected', self.apply_cleanup, can_archive),
             ],
             title='Candidate',
         )
         return 'break'
+
+    def _cleanup_select_in_category(self):
+        sel = self.cleanup_tree.selection()
+        if not sel or self._is_cleanup_group_row(sel[0]):
+            return
+        parent = self.cleanup_tree.parent(sel[0])
+        if not parent:
+            return
+        for child in self.cleanup_tree.get_children(parent):
+            cidx = self._cleanup_item_index(child)
+            if cidx is not None:
+                self.cleanup_selected.add(cidx)
+        self._update_cleanup_tree()
+        self._update_cleanup_summary(self._cached_cfg())
+
+    def _cleanup_copy_item_details(self):
+        idx = self._selected_cleanup_index()
+        if idx is None:
+            return
+        item = self.cleanup_items[idx]
+        cfg = self._cached_cfg() or {}
+        text = (
+            f"Path: {item.get('path') or '—'}\n"
+            f"Reason: {item.get('reason') or '—'}\n"
+            f"Size: {self._format_size(item.get('size', 0))}\n"
+            f"Planned archive: {self._planned_archive_dest(item, cfg)}"
+        )
+        try:
+            self.clipboard_clear()
+            self.clipboard_append(text)
+            self._set_status('Item details copied.')
+        except tk.TclError:
+            messagebox.showinfo('Item details', text)
 
     def _cleanup_reason_hint(self, reason: str) -> str:
         hints = {
@@ -3465,14 +3568,29 @@ class StartupManagerGUI(ctk.CTk):
 
     def _on_recommendation_card_right(self, event, index: int):
         self._select_recommendation_card(index)
-        self._ensure_rec_context_menu()
-        has = self._selected_recommendation() is not None
-        for idx, enabled in ((0, has), (1, has), (3, True), (4, True), (5, True)):
-            self._menu_entry_state(self._rec_context_menu, idx, enabled)
-        try:
-            self._rec_context_menu.tk_popup(event.x_root, event.y_root)
-        finally:
-            self._rec_context_menu.grab_release()
+        rec = self._selected_recommendation()
+        has = rec is not None
+        title = (rec.get('title') or '').lower() if rec else ''
+        is_archive = 'archive' in title and 'candidate' in title
+        is_large = 'large' in title
+        has_receipt = bool(getattr(self, '_scan_session_done', False) and self.cleanup_items)
+        self._show_row_popover(
+            event.x_root, event.y_root,
+            [
+                ('Open related page', self._recommendation_primary_action, has),
+                ('View details', self._recommendation_primary_action, has),
+                ('Copy recommendation', self._recommendation_copy_details, has),
+                ('Copy proof summary', self._copy_latest_receipt_summary, has_receipt),
+                ('Open receipt', self.preview_cleanup_receipt, has_receipt),
+                ('Open Proof Ledger', lambda: self._navigate_to_tab(1), True),
+                ('Review candidates', lambda: self._navigate_to_tab(3), is_archive),
+                ('Open Cleaner (large files)', self._recommendation_open_large_files, is_large),
+            ],
+            title='Recommendation',
+        )
+
+    def _recommendation_open_large_files(self):
+        self._navigate_to_tab(3)
 
     def _build_restore_tab(self):
         header = ttk.Frame(self.restore_tab, style='Content.TFrame')
@@ -3807,6 +3925,7 @@ class StartupManagerGUI(ctk.CTk):
                                          selectforeground=ON_ACCENT,
                                          highlightthickness=0)
         self.set_paths_list.pack(fill='both', expand=True)
+        self.set_paths_list.bind('<Button-3>', self._on_settings_paths_right_click)
         path_btns = ttk.Frame(paths_col, style='Card.TFrame')
         path_btns.pack(fill='x', pady=(6, 0))
         ttk.Button(path_btns, text='Add Folder…', style='Action.TButton',
@@ -4019,6 +4138,44 @@ class StartupManagerGUI(ctk.CTk):
         for idx in reversed(self.set_paths_list.curselection()):
             self.set_paths_list.delete(idx)
         self._mark_settings_dirty()
+
+    def _on_settings_paths_right_click(self, event):
+        lb = self.set_paths_list
+        idx = lb.nearest(event.y)
+        if idx >= 0:
+            lb.selection_clear(0, 'end')
+            lb.selection_set(idx)
+        has_sel = bool(lb.curselection())
+        path = lb.get(lb.curselection()[0]) if has_sel else ''
+
+        def _copy_path():
+            if not path:
+                return
+            try:
+                self.clipboard_clear()
+                self.clipboard_append(path)
+                self._set_status('Path copied.')
+            except tk.TclError:
+                messagebox.showinfo('Copy path', path)
+
+        def _open_path():
+            if path and Path(path).exists():
+                os.startfile(path)
+            elif path:
+                messagebox.showinfo('Open path', f'Path not found:\n{path}')
+
+        self._show_row_popover(
+            event.x_root, event.y_root,
+            [
+                ('Add folder…', self._settings_add_path, True),
+                ('Remove selected', self._settings_remove_path, has_sel),
+                ('Copy path', _copy_path, has_sel),
+                ('Open path', _open_path, has_sel),
+                ('Reset to default', self.load_settings_form, True),
+            ],
+            title='Scan folders',
+        )
+        return 'break'
 
     def _settings_browse_archive(self):
         folder = filedialog.askdirectory(parent=self)
@@ -4578,18 +4735,18 @@ class StartupManagerGUI(ctk.CTk):
         has_cmd = bool(entry and uninstaller and uninstaller.build_uninstall_command(
             entry, quiet=bool(self.uninst_quiet_var.get())))
         has_key = bool(self._uninstall_registry_key_text(entry))
+        has_publisher = bool(entry and entry.get('publisher'))
         self._show_row_popover(
             event.x_root, event.y_root,
             [
                 ('Uninstall…', self.uninstall_selected_program, has_entry),
-                ('Scan Leftovers…', self.scan_leftovers_for_selected, has_entry),
+                ('Scan leftovers…', self.scan_leftovers_for_selected, has_entry),
                 ('Force Remove…', self.force_remove_selected, has_entry),
-                ('Check / Uncheck', self._uninstall_ctx_toggle_check, has_entry),
-                ('Check all visible', self._uninstall_ctx_check_all, True),
-                ('Uncheck all visible', self._uninstall_ctx_uncheck_all, True),
                 ('Copy program name', self._uninstall_copy_name, has_entry),
+                ('Copy publisher', self._uninstall_copy_publisher, has_publisher),
                 ('Copy uninstall command', self._uninstall_copy_command, has_cmd),
                 ('Copy registry key', self._uninstall_copy_registry_key, has_key),
+                ('Search online', self._uninstall_search_online, has_entry),
                 ('Refresh list', self.refresh_uninstaller, True),
             ],
             title='Uninstaller',
@@ -4622,6 +4779,27 @@ class StartupManagerGUI(ctk.CTk):
         self.clipboard_append(entry.get('name') or '')
         self.update()
         self._set_status('Program name copied to clipboard.')
+
+    def _uninstall_copy_publisher(self):
+        entry = self._selected_program()
+        if not entry:
+            return
+        pub = entry.get('publisher') or ''
+        self.clipboard_clear()
+        self.clipboard_append(pub)
+        self.update()
+        self._set_status('Publisher copied to clipboard.')
+
+    def _uninstall_search_online(self):
+        import urllib.parse
+        import webbrowser
+        entry = self._selected_program()
+        if not entry:
+            return
+        name = entry.get('name') or 'program'
+        pub = entry.get('publisher') or ''
+        q = urllib.parse.quote(f'{name} {pub} uninstall'.strip())
+        webbrowser.open(f'https://www.google.com/search?q={q}')
 
     def _uninstall_copy_command(self):
         entry = self._selected_program()
@@ -5042,6 +5220,7 @@ class StartupManagerGUI(ctk.CTk):
         on_complete=None,
         token_key='tree',
         clear_selection=True,
+        on_progress=None,
     ):
         """Insert tree rows in small batches so the Tk event loop stays responsive."""
         token = self._cancel_chunked_work(token_key)
@@ -5080,6 +5259,8 @@ class StartupManagerGUI(ctk.CTk):
 
         if status_lbl is not None:
             status_lbl.config(text=f'Loading… 0/{total:,}')
+        if on_progress:
+            on_progress(0, total)
 
         state = {'idx': 0}
 
@@ -5096,6 +5277,8 @@ class StartupManagerGUI(ctk.CTk):
                     status_lbl.config(text=f'Loading… {state["idx"]:,}/{total:,}')
                 else:
                     status_lbl.config(text='')
+            if on_progress:
+                on_progress(state['idx'], total)
             if state['idx'] < total:
                 self.after(1, pump)
             elif on_complete:
@@ -5157,13 +5340,40 @@ class StartupManagerGUI(ctk.CTk):
 
         self.after(0, pump)
 
+    def _set_archive_footer_loading(self, current: int, total: int):
+        if not hasattr(self, 'archive_status_lbl'):
+            return
+        if total > 0:
+            self.archive_status_lbl.config(
+                text=f'Loading archive custody… {current:,} / {total:,} displayed')
+        else:
+            self.archive_status_lbl.config(text='Loading archive custody…')
+
+    def _set_archive_footer_ready(self, shown: int, total: int):
+        if not hasattr(self, 'archive_status_lbl'):
+            return
+        sel = len(self.archive_tree.selection()) if hasattr(self, 'archive_tree') else 0
+        self.archive_status_lbl.config(
+            text=f'Showing {shown:,} of {total:,} archive records · {sel:,} selected')
+
+    def _set_archive_footer_empty(self):
+        if hasattr(self, 'archive_status_lbl'):
+            self.archive_status_lbl.config(text='No archive records in custody.')
+
+    def _set_archive_footer_error(self, msg: str):
+        if hasattr(self, 'archive_status_lbl'):
+            self.archive_status_lbl.config(text=msg or 'Load failed.')
+
     def _set_archive_busy(self, busy: bool, message: str = ''):
         self._archive_busy = busy
         self._sync_archive_view(loading=busy)
         if busy:
             self._archive_loaded = False
-        if hasattr(self, 'archive_status_lbl') and message:
-            self.archive_status_lbl.config(text=message)
+            self._set_archive_footer_loading(0, 0)
+            self._update_archive_stat_cards(loading=True)
+        elif message:
+            if hasattr(self, 'archive_status_lbl'):
+                self.archive_status_lbl.config(text=message)
         self._sync_archive_action_states()
         self._update_brand_identity()
 
@@ -5172,16 +5382,24 @@ class StartupManagerGUI(ctk.CTk):
         busy = getattr(self, '_archive_busy', False)
         loaded = getattr(self, '_archive_loaded', False) and not busy
         total = int((getattr(self, '_archive_stats', {}) or {}).get('total', 0) or 0)
-        can_act = loaded and total > 0
+        sel = len(self.archive_tree.selection()) if hasattr(self, 'archive_tree') else 0
+        can_restore = loaded and sel > 0
+        can_delete = loaded and sel > 0
         refresh = getattr(self, '_archive_refresh_btn', None)
         if refresh is not None:
             try:
                 refresh.config(state='disabled' if busy else 'normal')
             except Exception:
                 pass
+        restore_btn = getattr(self, '_archive_restore_btn', None)
+        if restore_btn is not None:
+            try:
+                restore_btn.config(state='normal' if can_restore else 'disabled')
+            except Exception:
+                pass
         for btn in getattr(self, '_archive_action_btns', []):
             try:
-                btn.config(state='normal' if can_act else 'disabled')
+                btn.config(state='normal' if can_delete else 'disabled')
             except Exception:
                 pass
         for w in getattr(self, '_archive_filter_widgets', []):
@@ -5654,6 +5872,16 @@ class StartupManagerGUI(ctk.CTk):
         self._scan_diag['stop_requested'] = True
         self._set_status('Stopping scan…')
 
+    def skip_scan_folder(self):
+        if not getattr(self, '_cleaner_loading', False):
+            return
+        folder = (getattr(self, '_scan_progress', None) or {}).get('current_folder', '')
+        if folder:
+            self._scan_skip_folders.add(folder)
+            self._set_status(f'Skipping folder: {folder}')
+        else:
+            self._set_status('No active folder to skip.')
+
     def refresh_cleanup(self):
         if getattr(self, '_cleaner_loading', False):
             logger.info('Scan already running — ignoring duplicate start')
@@ -5672,12 +5900,11 @@ class StartupManagerGUI(ctk.CTk):
             'exclude_patterns': list(cfg.get('exclude_patterns') or []),
         }
         self._scan_stopped = False
+        self._scan_skip_folders = set()
         self._cleaner_loading = True
         self._cleaner_error = ''
         self.tb_preview.configure(state='disabled')
         self.tb_apply.configure(state='disabled')
-        self.cleanup_progress.pack(side='right')
-        self.cleanup_progress.start(12)
         self._sync_cleaner_state()
         self._sync_home_state()
         self._schedule_scan_progress_tick()
@@ -5688,10 +5915,16 @@ class StartupManagerGUI(ctk.CTk):
             self._bg_queue.put(('scan_progress', prog, None))
 
         def work():
+            skip_folders = self._scan_skip_folders
+
+            def skip_check(folder):
+                return folder in skip_folders
+
             items = cleanup_main.scan_candidates(
                 cfg,
                 cancel_check=self._scan_cancel_event.is_set,
                 on_progress=progress_cb,
+                skip_folder_check=skip_check,
             )
             cancelled = self._scan_cancel_event.is_set()
             return {'items': items, 'cancelled': cancelled, 'cfg': cfg}
@@ -5711,8 +5944,6 @@ class StartupManagerGUI(ctk.CTk):
             except Exception:
                 pass
             self._scan_progress_job = None
-        self.cleanup_progress.stop()
-        self.cleanup_progress.pack_forget()
         self.tb_preview.configure(state='normal')
         self.tb_apply.configure(state='normal')
         try:
@@ -6133,29 +6364,31 @@ class StartupManagerGUI(ctk.CTk):
             return records, stats
 
         def done(result, err):
-            self._archive_loaded = True
-            self._set_archive_busy(False)
             if err is not None:
-                self.archive_status_lbl.config(text=f'Load failed: {err}')
+                self._set_archive_busy(False)
+                self._set_archive_footer_error(f'Load failed: {err}')
                 self._sync_archive_action_states()
                 return
             self._archive_records_all, self._archive_stats = result
-            self._update_archive_stat_cards()
+            self._update_archive_stat_cards(loading=True)
             self._apply_archive_view_filters()
             self._update_context_panel()
-            self._sync_archive_action_states()
 
         self._run_bg(work, done)
 
-    def _update_archive_stat_cards(self):
+    def _update_archive_stat_cards(self, *, loading=False):
         stats = getattr(self, '_archive_stats', {}) or {}
+        placeholder = '…' if loading or getattr(self, '_archive_busy', False) else '0'
         if hasattr(self, 'stat_arch_total'):
-            self.stat_arch_total.config(text=str(stats.get('total', 0)))
-            self.stat_arch_safe.config(text=str(stats.get('safe_count', 0)))
-            self.stat_arch_bytes.config(text=self._format_size(stats.get('bytes_total', 0)))
+            self.stat_arch_total.config(
+                text=placeholder if loading else str(stats.get('total', 0)))
+            self.stat_arch_safe.config(
+                text=placeholder if loading else str(stats.get('safe_count', 0)))
+            self.stat_arch_bytes.config(
+                text=placeholder if loading else self._format_size(stats.get('bytes_total', 0)))
         sel = len(self.archive_tree.selection()) if hasattr(self, 'archive_tree') else 0
         if hasattr(self, 'stat_arch_selected'):
-            self.stat_arch_selected.config(text=str(sel))
+            self.stat_arch_selected.config(text=str(sel) if not loading else '…')
 
     def _apply_archive_view_filters(self):
         if archive_custody is None or not hasattr(self, 'archive_tree'):
@@ -6200,22 +6433,30 @@ class StartupManagerGUI(ctk.CTk):
             )
 
         def on_complete():
-            safe_n = sum(1 for r in records if r.get('prune_rank') == archive_custody.PRUNE_SAFE)
             total_all = len(getattr(self, '_archive_records_all', []) or [])
-            self.archive_status_lbl.config(
-                text=f'Showing {len(records):,} of {total_all:,} archive record(s) · '
-                     f'{safe_n:,} safe to delete in this view · 0 selected')
+            shown = len(records)
+            self._archive_loaded = True
+            self._set_archive_busy(False)
+            if shown:
+                self._set_archive_footer_ready(shown, total_all)
+            else:
+                self._set_archive_footer_empty()
             self._update_archive_stat_cards()
             self._on_archive_select()
             self._sync_archive_view(loading=False)
+            self._sync_archive_action_states()
 
+        if records:
+            self._set_archive_footer_loading(0, len(records))
         self._chunked_tree_populate(
             self.archive_tree,
             records,
             build_row,
-            status_lbl=self.archive_status_lbl,
             empty_hint=self.archive_empty,
             on_complete=on_complete,
+            on_progress=(
+                lambda cur, tot: self._set_archive_footer_loading(cur, tot) if records else None
+            ),
             token_key='archive_tree',
             clear_selection=True,
         )
@@ -6594,7 +6835,7 @@ class StartupManagerGUI(ctk.CTk):
             return
         rp = self._find_receipt_for_paths(entry.get('src'), entry.get('dest'))
         if rp:
-            self._view_receipt_file(rp)
+            self._view_receipt_file(rp, action_key='cleaner_archive')
         elif entry.get('present') and entry.get('dest'):
             self._activity_open_archive()
         else:
@@ -6628,21 +6869,47 @@ class StartupManagerGUI(ctk.CTk):
             and entry.get('kind') not in ('prune', 'restore')
         )
         has_path = has and bool(entry.get('dest') or entry.get('src'))
+        has_arch = has and bool(entry.get('dest'))
+        has_src = has and bool(entry.get('src'))
         self._show_row_popover(
             event.x_root, event.y_root,
             [
-                ('Open Receipt', self._activity_open_receipt, has and bool(rp)),
-                ('Open Archive', self._activity_open_archive,
-                 has and bool(entry.get('dest') if entry else False)),
-                ('Copy Proof', self._activity_copy_proof, has),
-                ('Verify Custody', self.verify_custody, True),
+                ('Open receipt', self._activity_open_receipt, has and bool(rp)),
+                ('Open archive', self._activity_open_archive, has_arch),
+                ('Copy proof', self._activity_copy_proof, has),
+                ('Copy event details', self._activity_copy_proof, has),
+                ('Verify custody', self.verify_custody, True),
                 ('Restore', self._activity_restore_selected, can_restore),
-                ('Copy Path', self._activity_copy_path, has_path),
-                ('Copy Event Details', self._activity_copy_proof, has),
+                ('Copy source path', self._activity_copy_source_path, has_src),
+                ('Copy archive path', self._activity_copy_archive_path, has_arch),
             ],
             title='Proof ledger',
         )
         return 'break'
+
+    def _activity_copy_source_path(self):
+        entry = self._selected_activity_entry()
+        if not entry or not entry.get('src'):
+            return
+        text = entry['src']
+        try:
+            self.clipboard_clear()
+            self.clipboard_append(text)
+            self._set_status('Source path copied.')
+        except tk.TclError:
+            messagebox.showinfo('Copy Path', text)
+
+    def _activity_copy_archive_path(self):
+        entry = self._selected_activity_entry()
+        if not entry or not entry.get('dest'):
+            return
+        text = entry['dest']
+        try:
+            self.clipboard_clear()
+            self.clipboard_append(text)
+            self._set_status('Archive path copied.')
+        except tk.TclError:
+            messagebox.showinfo('Copy Path', text)
 
     def _activity_open_receipt(self):
         entry = self._selected_activity_entry()
@@ -6650,7 +6917,7 @@ class StartupManagerGUI(ctk.CTk):
             return
         rp = self._find_receipt_for_paths(entry.get('src'), entry.get('dest'))
         if rp:
-            self._view_receipt_file(rp)
+            self._view_receipt_file(rp, action_key='cleaner_archive')
         else:
             messagebox.showinfo('Activity Ledger', 'No linked receipt file for this row.')
 
@@ -6788,6 +7055,9 @@ class StartupManagerGUI(ctk.CTk):
         self._rec_context_menu = menu
 
     def _on_recommendation_right_click(self, event):
+        idx = getattr(self, '_selected_rec_idx', None)
+        if idx is not None:
+            self._on_recommendation_card_right(event, idx)
         return 'break'
 
     def _on_archive_double_click(self, _event=None):
@@ -6843,24 +7113,53 @@ class StartupManagerGUI(ctk.CTk):
     def _on_archive_right_click(self, event):
         self._tree_right_click_select(self.archive_tree, event)
         self._on_archive_select()
-        has_sel = bool(self._selected_archive_records())
+        recs = self._selected_archive_records()
+        has_sel = bool(recs)
+        rec = recs[0] if recs else {}
+        has_orig = bool(rec.get('src') and Path(rec.get('src')).exists())
+        has_arch = bool(rec.get('dest') and Path(rec.get('dest')).exists())
+        has_receipt = bool(rec.get('receipt_path') and Path(rec.get('receipt_path')).is_file())
+        loaded = getattr(self, '_archive_loaded', False) and not getattr(self, '_archive_busy', False)
+        safe_rank = archive_custody.PRUNE_SAFE if archive_custody else 'Safe to delete'
+        safe_delete = loaded and has_sel and rec.get('prune_rank') == safe_rank
         self._show_row_popover(
             event.x_root, event.y_root,
             [
-                ('Restore Selected', self._archive_restore_selected, has_sel),
-                ('Delete from Archive…', self.confirm_prune_selected, has_sel),
-                ('Open Archive Location', self._archive_open_archive, has_sel),
-                ('Open Original Location', self._archive_open_original, has_sel),
-                ('Open Receipt', self._archive_open_receipt, has_sel),
+                ('Restore selected', self._archive_restore_selected, has_sel and loaded),
+                ('Open archived copy location', self._archive_open_archive, has_sel and has_arch),
+                ('Open original path', self._archive_open_original, has_sel and has_orig),
+                ('Open receipt', self._archive_open_receipt, has_sel and has_receipt),
+                ('Verify custody', self.verify_custody, loaded),
                 ('Copy archive path', self._archive_copy_path, has_sel),
-                ('Select all safe to delete', self._archive_select_all_safe, True),
-                ('Select visible', self._archive_select_visible, True),
-                ('Clear selection', self._archive_clear_selection, True),
+                ('Copy original path', self._archive_copy_original_path, has_sel),
+                ('Copy proof', self._archive_copy_proof, has_sel),
+                ('Delete archived copy only…', self.confirm_prune_selected, safe_delete),
                 ('Refresh', self.refresh_archive_browser, True),
             ],
             title='Archive custody',
         )
         return 'break'
+
+    def _archive_copy_proof(self):
+        recs = self._selected_archive_records()
+        if not recs:
+            return
+        rec = recs[0]
+        lines = [
+            f"Original: {rec.get('src') or '—'}",
+            f"Archive: {rec.get('dest') or '—'}",
+            f"When: {rec.get('when') or '—'}",
+            f"Reason: {rec.get('reason') or '—'}",
+            f"Size: {self._format_size(rec.get('size', 0))}",
+            f"Receipt: {rec.get('receipt_path') or '—'}",
+        ]
+        text = '\n'.join(lines)
+        try:
+            self.clipboard_clear()
+            self.clipboard_append(text)
+            self._set_status('Archive proof copied.')
+        except tk.TclError:
+            messagebox.showinfo('Archive proof', text)
 
     def _archive_copy_original_path(self):
         recs = self._selected_archive_records()
@@ -7072,6 +7371,40 @@ class StartupManagerGUI(ctk.CTk):
         ttk.Button(custom_btns, text='Add custom menu…', command=add_custom).pack(side='left')
         ttk.Button(custom_btns, text='Remove selected', command=remove_custom).pack(side='left', padx=6)
 
+        def _on_shell_custom_right(event):
+            idx = custom_list.nearest(event.y)
+            if idx >= 0:
+                custom_list.selection_clear(0, 'end')
+                custom_list.selection_set(idx)
+            sel = custom_list.curselection()
+            has = bool(sel)
+            item = (cfg.get('custom') or [])[sel[0]] if has else {}
+
+            def _copy_label():
+                if item.get('label'):
+                    self.clipboard_clear()
+                    self.clipboard_append(item['label'])
+
+            def _toggle_enabled():
+                if has:
+                    item['enabled'] = not bool(item.get('enabled', True))
+                    refresh_custom_list()
+
+            self._show_row_popover(
+                event.x_root, event.y_root,
+                [
+                    ('Enable item', _toggle_enabled, has and not item.get('enabled', True)),
+                    ('Disable item', _toggle_enabled, has and item.get('enabled', True)),
+                    ('Copy menu label', _copy_label, has),
+                    ('Remove selected', remove_custom, has),
+                    ('Restore default', lambda: (cfg.update({'custom': []}), refresh_custom_list()), True),
+                ],
+                title='Explorer menu item',
+            )
+            return 'break'
+
+        custom_list.bind('<Button-3>', _on_shell_custom_right)
+
         status = ttk.Label(frm, text='', style='Info.TLabel', wraplength=560)
         status.pack(anchor='w', pady=(0, 4))
 
@@ -7106,7 +7439,7 @@ class StartupManagerGUI(ctk.CTk):
         dlg.add_button('Remove from Explorer', do_remove)
         dlg.add_button('Install to Explorer', do_install, primary=True)
 
-    def _view_receipt_file(self, path, preview=False):
+    def _view_receipt_file(self, path, preview=False, *, module=None, action=None, action_key=None):
         if receipts_module is None:
             messagebox.showerror('Receipt', 'Receipts module unavailable.')
             return
@@ -7115,12 +7448,32 @@ class StartupManagerGUI(ctk.CTk):
         except Exception as e:
             messagebox.showerror('Receipt', f'Unable to read receipt:\n{e}')
             return
+        try:
+            from ui.receipt_identity import receipt_context
+            ctx = receipt_context(
+                body, module=module, action=action,
+                preview=preview, action_key=action_key,
+            )
+        except Exception:
+            ctx = {
+                'title': 'Cleanroom Receipt',
+                'preview': preview,
+                'module': module or 'Cleanroom',
+                'action': action or 'Receipt',
+            }
         if show_receipt:
-            show_receipt(self, body, receipt_path=path, preview=preview,
-                         bg=BG, card=CARD_BG, text_fg=TEXT, accent=ACCENT,
-                         muted=MUTED, border=BORDER, on_accent=ON_ACCENT)
+            show_receipt(
+                self, body, receipt_path=path,
+                preview=ctx.get('preview', preview),
+                module=ctx.get('module'),
+                action=ctx.get('action'),
+                action_key=action_key,
+                title=ctx.get('title'),
+                bg=BG, card=CARD_BG, text_fg=TEXT, accent=ACCENT,
+                muted=MUTED, border=BORDER, on_accent=ON_ACCENT,
+            )
         else:
-            self._show_text_dialog('Cleanroom Receipt', body)
+            self._show_text_dialog(ctx.get('title', 'Cleanroom Receipt'), body)
 
     def confirm_prune_selected(self):
         recs = self._selected_archive_records()
@@ -7295,7 +7648,7 @@ class StartupManagerGUI(ctk.CTk):
         if receipt_path:
             dlg.add_button(
                 'Open Receipt',
-                lambda: self._view_receipt_file(receipt_path),
+                lambda: self._view_receipt_file(receipt_path, action_key='cleaner_archive'),
                 side='left',
             )
         dlg.add_button('Open Archive Folder', self.open_archive_folder, side='left')
@@ -7320,7 +7673,7 @@ class StartupManagerGUI(ctk.CTk):
                 'No receipts yet — run a cleanup first.',
             )
             return
-        self._view_receipt_file(path)
+        self._view_receipt_file(path, action_key='latest')
 
     # ------------------------------------------------------------------
     # Verify Custody (prove the reversibility promise on demand)
@@ -7857,11 +8210,11 @@ class StartupManagerGUI(ctk.CTk):
         if review_count == 0:
             tone, band_text = ACCENT, 'Nothing pending'
         elif review_count < 10:
-            tone, band_text = SEVERITY_COLORS['low'], f'{review_count} to archive'
+            tone, band_text = SEVERITY_COLORS['low'], f'{review_count} to review'
         elif review_count < 30:
-            tone, band_text = SEVERITY_COLORS['medium'], f'{review_count} to archive'
+            tone, band_text = SEVERITY_COLORS['medium'], f'{review_count} to review'
         else:
-            tone, band_text = SEVERITY_COLORS['high'], f'{review_count} to archive'
+            tone, band_text = SEVERITY_COLORS['high'], f'{review_count} to review'
 
         self._draw_review_gauge(review_count, tone)
         self.health_band_lbl.config(text=band_text, fg=tone)
@@ -8203,7 +8556,7 @@ class StartupManagerGUI(ctk.CTk):
         if receipt_path and Path(receipt_path).is_file():
             dlg.add_button(
                 'Open Receipt',
-                lambda: (self._view_receipt_file(receipt_path), dlg.close()),
+                lambda: (self._view_receipt_file(receipt_path, action_key='archive_prune'), dlg.close()),
                 side='left', primary=True,
             )
         dlg.add_button('OK', dlg.close, primary=True)
@@ -8375,6 +8728,7 @@ class StartupManagerGUI(ctk.CTk):
                 ('Enable selected', self.enable_selected, states['enable'][0]),
                 ('Disable selected', self.disable_selected, states['disable'][0]),
                 ('Copy command', self.copy_command, states['copy'][0]),
+                ('Copy entry name', self._startup_copy_name, states['details'][0]),
                 ('Open file location', self._startup_open_file_location, states['open_file'][0]),
                 ('Open registry / Task Scheduler', self._startup_open_source_location, states['open_loc'][0]),
                 ('Search online', self._startup_search_online, states['search'][0]),
@@ -8439,6 +8793,18 @@ class StartupManagerGUI(ctk.CTk):
         name = ent.get('name') or 'startup program'
         q = urllib.parse.quote(f'{name} startup program')
         webbrowser.open(f'https://www.google.com/search?q={q}')
+
+    def _startup_copy_name(self):
+        ent = self._selected_entry()
+        if not ent:
+            return
+        name = ent.get('name') or ''
+        try:
+            self.clipboard_clear()
+            self.clipboard_append(name)
+            self._set_status('Entry name copied.')
+        except tk.TclError:
+            messagebox.showinfo('Copy name', name)
 
     def _update_detail(self):
         ent = self._selected_entry()

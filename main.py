@@ -14,6 +14,8 @@ logger = logging.getLogger(__name__)
 
 SCAN_PROGRESS_EVERY_FILES = 50
 SLOW_FOLDER_SECONDS = 30.0
+FOLDER_FILE_BUDGET = 25000
+SLOW_FOLDER_FILE_WARN = 10000
 
 try:
     import yaml
@@ -186,8 +188,8 @@ def _emit_scan_progress(on_progress, state: dict) -> None:
         logger.debug('scan progress callback failed', exc_info=True)
 
 
-def scan_candidates(cfg, cancel_check=None, on_progress=None):
-    """Scan configured folders; optional cooperative cancel + chunked progress."""
+def scan_candidates(cfg, cancel_check=None, on_progress=None, skip_folder_check=None):
+    """Scan configured folders; optional cooperative cancel, skip-folder, and progress."""
     candidates = []
     age_temp = cfg.get('age_days', {}).get('temp', 7)
     age_installers = cfg.get('age_days', {}).get('installers', 30)
@@ -201,9 +203,35 @@ def scan_candidates(cfg, cancel_check=None, on_progress=None):
     files_checked = 0
     files_since_emit = 0
     cancelled = False
+    skipped_folders: list[str] = []
+    folder_file_counts: dict[str, int] = {}
+    folder_started: dict[str, float] = {}
+    summarized_folders: list[str] = []
+
+    def is_under_skipped(folder: str) -> bool:
+        fp = Path(folder)
+        for sf in skipped_folders:
+            try:
+                sp = Path(sf)
+                if fp == sp or _path_is_under(fp, sp):
+                    return True
+            except Exception:
+                continue
+        return False
 
     def snapshot(current_folder: str = '') -> dict:
         reclaimable = sum(c.get('size', 0) for c in candidates)
+        folder_count = folder_file_counts.get(current_folder, 0) if current_folder else 0
+        folder_elapsed = 0.0
+        if current_folder and current_folder in folder_started:
+            folder_elapsed = time.time() - folder_started[current_folder]
+        slow = (
+            bool(current_folder)
+            and (
+                folder_elapsed >= SLOW_FOLDER_SECONDS
+                or folder_count >= SLOW_FOLDER_FILE_WARN
+            )
+        )
         return {
             'started_at': started,
             'elapsed_s': time.time() - started,
@@ -213,6 +241,11 @@ def scan_candidates(cfg, cancel_check=None, on_progress=None):
             'reclaimable_bytes': reclaimable,
             'reclaimable_label': human_size(reclaimable),
             'current_folder': current_folder,
+            'folder_file_count': folder_count,
+            'folder_elapsed_s': folder_elapsed,
+            'slow_folder': slow,
+            'skipped_folders': list(skipped_folders),
+            'summarized_folders': list(summarized_folders),
             'configured_roots': [str(p) for p in roots],
             'exclude_patterns': list(exclude_patterns),
             'stop_requested': bool(cancel_check and cancel_check()),
@@ -226,13 +259,22 @@ def scan_candidates(cfg, cancel_check=None, on_progress=None):
             cancelled = True
             break
         folders_scanned += 1
-        folder_started = time.time()
+        folder_started[str(rootp)] = time.time()
         _emit_scan_progress(on_progress, snapshot(str(rootp)))
         for f in rootp.rglob('*'):
             if cancel_check and cancel_check():
                 cancelled = True
                 break
             if not f.is_file():
+                continue
+            parent = str(f.parent)
+            if is_under_skipped(parent):
+                continue
+            if skip_folder_check and skip_folder_check(parent):
+                skipped_folders.append(parent)
+                prog = snapshot(parent)
+                prog['folder_skipped'] = parent
+                _emit_scan_progress(on_progress, prog)
                 continue
             path_str = str(f)
             if _matches_patterns(path_str, exclude_patterns):
@@ -244,11 +286,25 @@ def scan_candidates(cfg, cancel_check=None, on_progress=None):
                 size = f.stat().st_size
             except Exception:
                 continue
+            if parent not in folder_started:
+                folder_started[parent] = time.time()
+            folder_file_counts[parent] = folder_file_counts.get(parent, 0) + 1
+            cnt = folder_file_counts[parent]
+            if cnt > FOLDER_FILE_BUDGET:
+                if parent not in summarized_folders:
+                    summarized_folders.append(parent)
+                    skipped_folders.append(parent)
+                    logger.info(
+                        'Summarized large folder (%d files): %s', cnt, parent)
+                    prog = snapshot(parent)
+                    prog['folder_summarized'] = parent
+                    _emit_scan_progress(on_progress, prog)
+                continue
             files_checked += 1
             files_since_emit += 1
             if files_since_emit >= SCAN_PROGRESS_EVERY_FILES:
                 files_since_emit = 0
-                _emit_scan_progress(on_progress, snapshot(str(f.parent)))
+                _emit_scan_progress(on_progress, snapshot(parent))
             if size == 0 and is_older_than(f, age_temp):
                 candidates.append({'path': path_str, 'reason': 'zero-byte', 'size': size})
                 continue
@@ -262,7 +318,7 @@ def scan_candidates(cfg, cancel_check=None, on_progress=None):
                 candidates.append({'path': path_str, 'reason': 'large-file', 'size': size})
         if cancelled:
             break
-        elapsed_folder = time.time() - folder_started
+        elapsed_folder = time.time() - folder_started.get(str(rootp), started)
         if elapsed_folder >= SLOW_FOLDER_SECONDS:
             logger.info('Slow scan folder: %s (%.1fs)', rootp, elapsed_folder)
 

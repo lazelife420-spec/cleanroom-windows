@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""In-app Cleanroom receipt viewer — branded dark modal with summary + raw text."""
+"""In-app Cleanroom receipt viewer — branded proof modal with R.E.C.E.I.P.T. identity."""
 from __future__ import annotations
 
 import os
@@ -10,28 +10,20 @@ import customtkinter as ctk
 
 from ui import ctk_theme
 from ui.product_dialogs import CleanroomModal
+from ui.receipt_identity import receipt_context
 
 
-def _parse_receipt_meta(text: str) -> dict:
+def _parse_receipt_meta(text: str, ctx: dict) -> dict:
     body = text or ''
     meta = {
-        'kind': 'Receipt',
+        'kind': ctx['title'],
+        'badge': ctx['badge'],
+        'module': ctx['module'],
         'timestamp': '',
         'items': '',
         'bytes': '',
-        'proof': '',
+        'proof': ctx.get('safety') or '',
     }
-    upper = body.upper()
-    if 'PRUNE RECEIPT' in upper:
-        meta['kind'] = 'Prune Archive'
-        meta['proof'] = 'Archive-only removal. Original live files were not touched.'
-    elif 'PREVIEW ONLY' in upper:
-        meta['kind'] = 'Preview Receipt'
-        meta['proof'] = 'Preview only — nothing has been archived yet.'
-    else:
-        meta['proof'] = (
-            'Nothing was deleted. Archived items can be restored from Restore or Cleanroom Rewind.'
-        )
     m = re.search(r'Date:\s+(\S+\s+\S+)', body)
     if m:
         meta['timestamp'] = m.group(1).strip()
@@ -48,7 +40,7 @@ def _parse_receipt_meta(text: str) -> dict:
 
 
 class ReceiptViewerDialog:
-    """Dark Cleanroom receipt modal."""
+    """Dark Cleanroom receipt modal with proof identity."""
 
     def __init__(
         self,
@@ -57,6 +49,9 @@ class ReceiptViewerDialog:
         title='Receipt',
         receipt_path=None,
         preview=False,
+        module=None,
+        action=None,
+        action_key=None,
         bg='#1a1d24',
         card='#262c36',
         text_fg='#e5e7eb',
@@ -72,38 +67,62 @@ class ReceiptViewerDialog:
             bg=bg, card=card, accent=accent, text=text_fg,
             muted=muted, border=border, on_accent=on_accent, head=card,
         )
-        meta = _parse_receipt_meta(self._text_body)
-        if preview:
-            meta['kind'] = 'Preview Receipt'
-            meta['proof'] = 'Preview only — nothing has been archived yet.'
+        ctx = receipt_context(
+            self._text_body, module=module, action=action,
+            preview=preview, action_key=action_key,
+        )
+        meta = _parse_receipt_meta(self._text_body, ctx)
+        win_title = ctx['title']
+        if title and title != 'Receipt' and 'Cleanroom Receipt' in title:
+            win_title = title
 
         self._modal = CleanroomModal(
-            parent, title, width=660, height=580, colors=colors, resizable=True,
+            parent, win_title, width=680, height=620, colors=colors, resizable=True,
         )
-        self._modal.heading('Receipt', size=13)
-        title_line = meta['kind']
-        if meta['timestamp']:
-            title_line = f"{meta['kind']} · {meta['timestamp']}"
         ctk_theme.label(
-            self._modal.body, title_line, text_color=text_fg,
+            self._modal.body, ctx['acronym'], text_color=accent,
+            font_size=11, weight='bold',
+        ).pack(anchor='w')
+        ctk_theme.label(
+            self._modal.body, ctx['expanded'], text_color=muted,
+            font_size=9, wraplength=620, justify='left',
+        ).pack(anchor='w', pady=(2, 8))
+
+        ctk_theme.label(
+            self._modal.body, ctx['title'], text_color=text_fg,
             font_size=16, weight='bold',
         ).pack(anchor='w', pady=(4, 0))
+        if meta['timestamp']:
+            ctk_theme.label(
+                self._modal.body, meta['timestamp'], text_color=muted, font_size=10,
+            ).pack(anchor='w', pady=(2, 0))
+
+        if meta['badge']:
+            badge_frame = ctk.CTkFrame(self._modal.body, fg_color=accent, corner_radius=6)
+            badge_frame.pack(anchor='w', pady=(8, 0))
+            ctk_theme.label(
+                badge_frame, meta['badge'], text_color=on_accent,
+                font_size=10, weight='bold',
+            ).pack(padx=10, pady=4)
 
         stats = ctk.CTkFrame(self._modal.body, fg_color=card)
         stats.pack(fill='x', pady=(10, 0))
+        ctk_theme.label(
+            stats, f"Module: {meta['module']}", text_color=text_fg, font_size=11,
+        ).pack(anchor='w', padx=8, pady=(8, 0))
         if meta['items']:
             ctk_theme.label(
                 stats, f"Items: {meta['items']}", text_color=text_fg, font_size=11,
-            ).pack(anchor='w')
+            ).pack(anchor='w', padx=8, pady=(2, 0))
         if meta['bytes']:
             ctk_theme.label(
                 stats, f"Size: {meta['bytes']}", text_color=text_fg, font_size=11,
-            ).pack(anchor='w', pady=(2, 0))
+            ).pack(anchor='w', padx=8, pady=(2, 0))
         if meta['proof']:
             ctk_theme.label(
                 stats, meta['proof'], text_color=muted,
-                font_size=10, wraplength=580, justify='left',
-            ).pack(anchor='w', pady=(8, 0))
+                font_size=10, wraplength=600, justify='left',
+            ).pack(anchor='w', padx=8, pady=(8, 8))
 
         tabs = ctk.CTkTabview(
             self._modal.body, fg_color=card, segmented_button_fg_color=bg,
@@ -120,7 +139,7 @@ class ReceiptViewerDialog:
             bg=card, fg=text_fg, relief='flat', padx=8, pady=8,
         )
         summary.pack(fill='both', expand=True)
-        summary.insert('1.0', self._summarize_body(meta))
+        summary.insert('1.0', self._summarize_body(meta, ctx))
         summary.configure(state='disabled')
 
         raw_wrap = ctk.CTkFrame(raw_tab, fg_color=card)
@@ -142,8 +161,11 @@ class ReceiptViewerDialog:
             self._modal.add_button('Open Receipt Folder', self._open_folder, side='left')
         self._modal.add_button('Close', self._modal.close, primary=True)
 
-    def _summarize_body(self, meta: dict) -> str:
-        lines = [f"Type: {meta['kind']}"]
+    def _summarize_body(self, meta: dict, ctx: dict) -> str:
+        lines = [ctx['title'], ctx['acronym'], ctx['expanded'], '']
+        if meta['badge']:
+            lines.append(f"Status: {meta['badge']}")
+        lines.append(f"Module: {meta['module']}")
         if meta['timestamp']:
             lines.append(f"When: {meta['timestamp']}")
         if meta['items']:

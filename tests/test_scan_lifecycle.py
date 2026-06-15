@@ -44,6 +44,39 @@ def test_scan_candidates_cancel_returns_partial(tmp_path):
     assert progress[-1].get('completed') is True
 
 
+def test_scan_candidates_skip_folder_check(tmp_path):
+    m = _import_main()
+    root = tmp_path / 'scanroot'
+    root.mkdir()
+    skip_dir = root / 'heavy'
+    skip_dir.mkdir()
+    light = root / 'light.txt'
+    light.write_text('x')
+    for i in range(5):
+        (skip_dir / f'big{i}.txt').write_text('y' * 20)
+    skipped = []
+
+    def skip_check(folder):
+        if 'heavy' in folder.replace('\\', '/'):
+            skipped.append(folder)
+            return True
+        return False
+
+    cfg = {
+        'paths': [str(root)],
+        'age_days': {'temp': -1, 'installers': -1},
+        'size_threshold_mb': 0,
+        'extensions_archive': ['.txt'],
+        'exclude_patterns': [],
+        'whitelist': [],
+    }
+    items = m.scan_candidates(cfg, skip_folder_check=skip_check)
+    paths = {Path(i['path']).name for i in items}
+    assert 'light.txt' in paths
+    assert not any(p.startswith('big') for p in paths)
+    assert skipped
+
+
 def test_scan_candidates_skips_archive_dir(tmp_path):
     m = _import_main()
     archive = tmp_path / 'archive'
