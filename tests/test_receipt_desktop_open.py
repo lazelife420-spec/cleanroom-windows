@@ -7,6 +7,23 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 
+def _tk_works() -> bool:
+    try:
+        import customtkinter as ctk
+        root = ctk.CTk()
+        ctk.CTkButton(root, text='probe')
+        root.update_idletasks()
+        root.destroy()
+        return True
+    except Exception:
+        return False
+
+
+_needs_display = pytest.mark.skipif(
+    not _tk_works(), reason='requires a working tk install (headless CI may lack button.tcl)',
+)
+
+
 class TestAppCLI:
     def test_parse_args_no_flags(self):
         from receipt_desktop.app import parse_args
@@ -116,8 +133,9 @@ class TestParseThenDisplay:
         assert s.trust_display == 'Unknown'
 
 
+@_needs_display
 class TestViewerNoTk:
-    """Tests that do NOT require a display — state/logic only."""
+    """Tests that require ReceiptViewerApp (needs a working tk install)."""
 
     def test_viewer_app_can_instantiate_minimal(self, monkeypatch):
         """Smoke: ReceiptViewerApp.__init__ without launching mainloop."""
