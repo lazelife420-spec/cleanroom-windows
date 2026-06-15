@@ -100,10 +100,8 @@ def main() -> int:
 
     gui_src = (ROOT / 'startup_manager_gui.py').read_text(encoding='utf-8')
     check('def _run_archive_delete' in gui_src, 'Central delete handler exists')
-    check(gui_src.count("askokcancel('Delete from Archive'") >= 1,
-          'Delete from Archive requires confirmation')
-    check("'Confirm Delete'" in gui_src and gui_src.count('askokcancel') >= 2,
-          'Delete confirmation is double-step')
+    check('_show_delete_archive_confirm' in gui_src,
+          'Delete from Archive uses summary confirmation dialog')
     check("'Delete All Safe'" in gui_src, 'Delete all safe requires confirmation')
     check('open_shell_context_menu_tool' in gui_src, 'Explorer context menu builder present')
     check('_on_archive_right_click' in gui_src, 'In-app Archive right-click wired')

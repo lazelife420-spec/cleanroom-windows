@@ -1,99 +1,217 @@
 #!/usr/bin/env python3
-"""In-app Cleanroom receipt viewer — supplements, never replaces, .txt proof files."""
+"""In-app Cleanroom receipt viewer — branded proof modal with R.E.C.E.I.P.T. identity."""
 from __future__ import annotations
 
 import os
+import re
 import tkinter as tk
-from tkinter import ttk, messagebox
-from pathlib import Path
+from tkinter import messagebox
+
+import customtkinter as ctk
+
+from ui import ctk_theme
+from ui.product_dialogs import CleanroomModal
+from ui.receipt_identity import receipt_context
 
 
-class ReceiptViewerDialog(tk.Toplevel):
-    """Native receipt panel with optional external open."""
+def _parse_receipt_meta(text: str, ctx: dict) -> dict:
+    body = text or ''
+    meta = {
+        'kind': ctx['title'],
+        'badge': ctx['badge'],
+        'module': ctx['module'],
+        'timestamp': '',
+        'items': '',
+        'bytes': '',
+        'proof': ctx.get('safety') or '',
+    }
+    m = re.search(r'Date:\s+(\S+\s+\S+)', body)
+    if m:
+        meta['timestamp'] = m.group(1).strip()
+    for pat, key in (
+        (r'Items moved:\s+(\d+)', 'items'),
+        (r'Items pruned:\s+(\d+)', 'items'),
+        (r'Space moved:\s+(\S+)', 'bytes'),
+        (r'Bytes pruned:\s+(\S+)', 'bytes'),
+    ):
+        m = re.search(pat, body, re.I)
+        if m:
+            meta[key] = m.group(1)
+    return meta
 
-    def __init__(self, parent, text, title='Cleanroom Receipt', receipt_path=None,
-                 preview=False, bg='#1a1a2e', card='#16213e', text_fg='#eaeaea',
-                 receipt_available=False, open_in_receipt=None):
-        super().__init__(parent)
-        self._receipt_path = Path(receipt_path) if receipt_path else None
+
+class ReceiptViewerDialog:
+    """Dark Cleanroom receipt modal with proof identity."""
+
+    def __init__(
+        self,
+        parent,
+        text,
+        title='Receipt',
+        receipt_path=None,
+        preview=False,
+        module=None,
+        action=None,
+        action_key=None,
+        bg='#1a1d24',
+        card='#262c36',
+        text_fg='#e5e7eb',
+        accent='#3b82f6',
+        muted='#9ca3af',
+        border='#39414e',
+        on_accent='#ffffff',
+        receipt_available=False,
+        open_in_receipt=None,
+        **_kwargs,
+    ):
+        self._receipt_path = receipt_path
         self._text_body = text or ''
         # Optional hand-off to the standalone RECEIPT proof viewer. The button
         # stays hidden unless RECEIPT is available AND we have a file on disk.
         self._open_in_receipt_cb = open_in_receipt
         self._receipt_available = bool(receipt_available)
-        self.configure(bg=bg)
-        self.title(title)
-        self.geometry('620x520')
-        self.minsize(480, 360)
-        self.transient(parent)
-        self.grab_set()
-        self.bind('<Escape>', lambda e: self.destroy())
-
-        head = ttk.Frame(self)
-        head.pack(fill='x', padx=14, pady=(12, 4))
-        ttk.Label(head, text='CLEANROOM — RECEIPT', font=('Segoe UI', 13, 'bold')).pack(anchor='w')
-        ttk.Label(head, text='Clean safely. Prove everything. Undo anytime.',
-                  font=('Segoe UI', 9)).pack(anchor='w', pady=(2, 0))
-        if preview:
-            ttk.Label(head, text='Preview only — nothing archived yet.',
-                      foreground='#fbbf24').pack(anchor='w', pady=(4, 0))
-
-        wrap = ttk.Frame(self)
-        wrap.pack(fill='both', expand=True, padx=14, pady=8)
-        self._text = tk.Text(
-            wrap, wrap='word', font=('Consolas', 10),
-            bg=card, fg=text_fg, insertbackground=text_fg,
-            relief='flat', padx=10, pady=10,
+        colors = dict(
+            bg=bg, card=card, accent=accent, text=text_fg,
+            muted=muted, border=border, on_accent=on_accent, head=card,
         )
-        scroll = ttk.Scrollbar(wrap, orient='vertical', command=self._text.yview)
-        self._text.configure(yscrollcommand=scroll.set)
-        self._text.pack(side='left', fill='both', expand=True)
-        scroll.pack(side='right', fill='y')
-        self._text.insert('1.0', self._text_body)
-        self._text.configure(state='disabled')
+        ctx = receipt_context(
+            self._text_body, module=module, action=action,
+            preview=preview, action_key=action_key,
+        )
+        meta = _parse_receipt_meta(self._text_body, ctx)
+        win_title = ctx['title']
+        if title and title != 'Receipt' and 'Cleanroom Receipt' in title:
+            win_title = title
 
-        btns = ttk.Frame(self)
-        btns.pack(fill='x', padx=14, pady=(0, 12))
-        ttk.Button(btns, text='Copy Receipt', command=self._copy).pack(side='left')
-        if self._receipt_path:
-            ttk.Button(btns, text='Open Receipt File',
-                       command=self._open_file).pack(side='left', padx=(6, 0))
-            ttk.Button(btns, text='Open Receipt Folder',
-                       command=self._open_folder).pack(side='left', padx=(6, 0))
+        self._modal = CleanroomModal(
+            parent, win_title, width=680, height=620, colors=colors, resizable=True,
+        )
+        ctk_theme.label(
+            self._modal.body, ctx['acronym'], text_color=accent,
+            font_size=11, weight='bold',
+        ).pack(anchor='w')
+        ctk_theme.label(
+            self._modal.body, ctx['expanded'], text_color=muted,
+            font_size=9, wraplength=620, justify='left',
+        ).pack(anchor='w', pady=(2, 8))
+
+        ctk_theme.label(
+            self._modal.body, ctx['title'], text_color=text_fg,
+            font_size=16, weight='bold',
+        ).pack(anchor='w', pady=(4, 0))
+        if meta['timestamp']:
+            ctk_theme.label(
+                self._modal.body, meta['timestamp'], text_color=muted, font_size=10,
+            ).pack(anchor='w', pady=(2, 0))
+
+        if meta['badge']:
+            badge_frame = ctk.CTkFrame(self._modal.body, fg_color=accent, corner_radius=6)
+            badge_frame.pack(anchor='w', pady=(8, 0))
+            ctk_theme.label(
+                badge_frame, meta['badge'], text_color=on_accent,
+                font_size=10, weight='bold',
+            ).pack(padx=10, pady=4)
+
+        stats = ctk.CTkFrame(self._modal.body, fg_color=card)
+        stats.pack(fill='x', pady=(10, 0))
+        ctk_theme.label(
+            stats, f"Module: {meta['module']}", text_color=text_fg, font_size=11,
+        ).pack(anchor='w', padx=8, pady=(8, 0))
+        if meta['items']:
+            ctk_theme.label(
+                stats, f"Items: {meta['items']}", text_color=text_fg, font_size=11,
+            ).pack(anchor='w', padx=8, pady=(2, 0))
+        if meta['bytes']:
+            ctk_theme.label(
+                stats, f"Size: {meta['bytes']}", text_color=text_fg, font_size=11,
+            ).pack(anchor='w', padx=8, pady=(2, 0))
+        if meta['proof']:
+            ctk_theme.label(
+                stats, meta['proof'], text_color=muted,
+                font_size=10, wraplength=600, justify='left',
+            ).pack(anchor='w', padx=8, pady=(8, 8))
+
+        tabs = ctk.CTkTabview(
+            self._modal.body, fg_color=card, segmented_button_fg_color=bg,
+            segmented_button_selected_color=accent,
+            segmented_button_unselected_color=card,
+            text_color=text_fg,
+        )
+        tabs.pack(fill='both', expand=True, pady=(12, 0))
+        summary_tab = tabs.add('Summary')
+        raw_tab = tabs.add('Raw receipt')
+
+        summary = tk.Text(
+            summary_tab, wrap='word', font=('Segoe UI', 10),
+            bg=card, fg=text_fg, relief='flat', padx=8, pady=8,
+        )
+        summary.pack(fill='both', expand=True)
+        summary.insert('1.0', self._summarize_body(meta, ctx))
+        summary.configure(state='disabled')
+
+        raw_wrap = ctk.CTkFrame(raw_tab, fg_color=card)
+        raw_wrap.pack(fill='both', expand=True)
+        raw = tk.Text(
+            raw_wrap, wrap='word', font=('Consolas', 10),
+            bg='#0f1419', fg=text_fg, relief='flat', padx=10, pady=10,
+        )
+        scroll = ctk.CTkScrollbar(raw_wrap, command=raw.yview)
+        raw.configure(yscrollcommand=scroll.set)
+        raw.pack(side='left', fill='both', expand=True)
+        scroll.pack(side='right', fill='y')
+        raw.insert('1.0', self._text_body)
+        raw.configure(state='disabled')
+
+        self._modal.add_button('Copy Receipt', self._copy, side='left')
+        if receipt_path:
+            self._modal.add_button('Open Receipt File', self._open_file, side='left')
+            self._modal.add_button('Open Receipt Folder', self._open_folder, side='left')
             # Hidden entirely unless RECEIPT is available — no disabled button.
             if self._receipt_available and self._open_in_receipt_cb:
-                ttk.Button(btns, text='Open in RECEIPT',
-                           command=self._open_in_receipt).pack(side='left', padx=(6, 0))
-        ttk.Button(btns, text='Close Receipt', command=self.destroy).pack(side='right')
+                self._modal.add_button('Open in RECEIPT', self._open_in_receipt, side='left')
+        self._modal.add_button('Close', self._modal.close, primary=True)
+
+    def _summarize_body(self, meta: dict, ctx: dict) -> str:
+        lines = [ctx['title'], ctx['acronym'], ctx['expanded'], '']
+        if meta['badge']:
+            lines.append(f"Status: {meta['badge']}")
+        lines.append(f"Module: {meta['module']}")
+        if meta['timestamp']:
+            lines.append(f"When: {meta['timestamp']}")
+        if meta['items']:
+            lines.append(f"Items: {meta['items']}")
+        if meta['bytes']:
+            lines.append(f"Total size: {meta['bytes']}")
+        lines.extend(['', meta.get('proof') or '', '', 'See Raw receipt tab for full proof text.'])
+        return '\n'.join(lines)
 
     def _copy(self):
         try:
-            self.clipboard_clear()
-            self.clipboard_append(self._text_body)
-            self.update_idletasks()
+            root = self._modal.win
+            root.clipboard_clear()
+            root.clipboard_append(self._text_body)
+            root.update_idletasks()
         except tk.TclError:
-            messagebox.showinfo('Copy Receipt', 'Clipboard unavailable in this session.')
+            pass
 
     def _open_file(self):
-        if not self._receipt_path or not self._receipt_path.is_file():
-            messagebox.showinfo('Receipt', 'Receipt file not found on disk.')
+        path = self._receipt_path
+        if not path or not os.path.isfile(str(path)):
             return
         try:
-            os.startfile(str(self._receipt_path))
-        except OSError as e:
-            messagebox.showerror('Receipt', f'Unable to open receipt file:\n{e}')
+            os.startfile(str(path))
+        except OSError:
+            pass
 
     def _open_folder(self):
         if not self._receipt_path:
             return
-        folder = self._receipt_path.parent
-        if not folder.is_dir():
-            messagebox.showinfo('Receipt', 'Receipt folder not found.')
-            return
-        try:
-            os.startfile(str(folder))
-        except OSError as e:
-            messagebox.showerror('Receipt', f'Unable to open folder:\n{e}')
+        folder = os.path.dirname(str(self._receipt_path))
+        if os.path.isdir(folder):
+            try:
+                os.startfile(folder)
+            except OSError:
+                pass
 
     def _open_in_receipt(self):
         if not self._open_in_receipt_cb or not self._receipt_path:
@@ -109,9 +227,5 @@ class ReceiptViewerDialog(tk.Toplevel):
                 "uploaded.")
 
 
-def show_receipt(parent, text, receipt_path=None, preview=False,
-                 receipt_available=False, open_in_receipt=None, **kwargs):
-    return ReceiptViewerDialog(
-        parent, text, receipt_path=receipt_path, preview=preview,
-        receipt_available=receipt_available, open_in_receipt=open_in_receipt,
-        **kwargs)
+def show_receipt(parent, text, receipt_path=None, preview=False, **kwargs):
+    return ReceiptViewerDialog(parent, text, receipt_path=receipt_path, preview=preview, **kwargs)

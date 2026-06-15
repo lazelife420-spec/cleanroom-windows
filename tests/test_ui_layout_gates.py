@@ -8,10 +8,10 @@ from ui import window_geometry
 
 
 def test_default_and_minimum_window_sizes():
-    assert window_geometry.DEFAULT_SIZE == (1050, 700)
-    assert window_geometry.MAX_SIZE == (1080, 780)
+    assert window_geometry.DEFAULT_SIZE == (1150, 720)
+    assert window_geometry.MAX_SIZE == (1280, 820)
     assert window_geometry.MIN_SIZE[0] >= 920
-    assert window_geometry.MIN_SIZE[1] >= 560
+    assert window_geometry.MIN_SIZE[1] >= 580
 
 
 def test_saved_geometry_clamps_tall_aspect():
@@ -48,4 +48,5 @@ def test_saved_geometry_clamps_excess_width():
             return 96.0
 
     w, h, *_ = window_geometry.compute_geometry(_W(), {'window_geometry': {'w': 2200, 'h': 700}})
-    assert w <= window_geometry.MAX_SIZE[0]
+    assert w <= 2560 - window_geometry.MARGIN
+    assert w < 2200

@@ -10,6 +10,9 @@ APP_DISPLAY = 'Cleanroom'
 APP_TAGLINE = ('A Windows cleaner that archives first, proves every action, '
                'and lets you roll back.')
 APP_MOTTO = 'Clean safely. Prove everything. Undo anytime.'
+APP_LOCKUP_TAGLINE = 'Archive-first cleanup, with receipts.'
+APP_LOCKUP_PILL = 'Receipt-backed'
+LIGHTS_OUT_RELEASE_URL = 'https://github.com/Z3r0DayZion-install/lights-out/releases/latest'
 REPO_NAME = 'cleanroom-windows'
 DATA_DIR_NAME = 'Cleanroom'
 LEGACY_DATA_DIR_NAME = 'SmartClean'  # Smart Clean → Cleanroom upgrade path
@@ -22,7 +25,9 @@ BRAND_DIR = _ROOT / 'assets' / 'brand'
 LOGO_ORIGINAL_PATH = BRAND_DIR / 'cleanroom-logo-original.png'
 LOGO_PATH = BRAND_DIR / 'cleanroom-logo.png'
 ICON_PNG_PATH = BRAND_DIR / 'cleanroom-icon.png'
+ICON_TRAY_PNG_PATH = BRAND_DIR / 'cleanroom-icon-tray.png'
 ICON_ICO_PATH = BRAND_DIR / 'cleanroom-icon.ico'
+ICON_SVG_PATH = BRAND_DIR / 'cleanroom-icon.svg'
 
 _migrated = False
 
