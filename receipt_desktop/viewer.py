@@ -7,6 +7,7 @@ from typing import Callable
 
 import customtkinter as ctk
 
+from receipt_core.export import build_proof_pack_html
 from receipt_core.parse import parse_file
 from receipt_core.schema import ReceiptType
 from receipt_core.validate import CustodyStatus, validate
@@ -99,6 +100,14 @@ class ReceiptViewerApp(ctk.CTk):
 
         right = ctk.CTkFrame(bar, fg_color='transparent')
         right.pack(side='right', padx=12, pady=(14, 10))
+
+        self._export_btn = ctk.CTkButton(
+            right, text='Export Proof Pack', command=self._export_proof_pack,
+            fg_color=_P['HEAD'], hover_color=_P['ACCENT_SOFT'],
+            text_color=_P['TEXT'], font=_font(11), corner_radius=6,
+            height=32,
+        )
+        self._export_btn.pack(side='left', padx=(0, 8))
 
         self._open_btn = ctk.CTkButton(
             right, text='Open Receipt', command=self._prompt_open,
@@ -552,6 +561,29 @@ class ReceiptViewerApp(ctk.CTk):
             self.update_idletasks()
         except tk.TclError:
             pass  # clipboard unavailable — silently ignore
+
+    def _export_proof_pack(self) -> None:
+        """Export a local HTML proof pack from the currently loaded receipt."""
+        receipt = self._state.receipt
+        if receipt is None:
+            return
+
+        from tkinter import filedialog
+
+        path = filedialog.asksaveasfilename(
+            title='Export Proof Pack',
+            defaultextension='.html',
+            filetypes=[('HTML files', '*.html'), ('All files', '*.*')],
+            initialfile=f'receipt-proof-pack-{receipt.receipt_type.value}.html',
+        )
+        if not path:
+            return
+
+        html_content = build_proof_pack_html(receipt, result=self._state.result)
+        try:
+            Path(path).write_text(html_content, encoding='utf-8')
+        except OSError:
+            pass  # silently skip write failures
 
     # ------------------------------------------------------------------
     # raw tab
