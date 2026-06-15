@@ -111,7 +111,7 @@ class ReceiptPrinterPanel(tk.Frame):
         self._stamp_lbl.pack(fill='x', pady=(8, 0))
 
         self._idle_lbl = tk.Label(
-            self._slot, text='Awaiting proof…', bg=panel_bg, fg=muted,
+            self._slot, text='Ready for proof output…', bg=panel_bg, fg=muted,
             font=('Segoe UI', 8),
         )
         self._idle_lbl.place(relx=0.5, rely=0.55, anchor='center')
@@ -147,6 +147,27 @@ class ReceiptPrinterPanel(tk.Frame):
             for lbl in self._line_labels:
                 lbl.config(text='')
             self._stamp_lbl.config(text='')
+
+    def show_idle(self, message='Select a row to view proof details'):
+        """Static placeholder when no row is selected."""
+        self._cancel_jobs()
+        self._playing = False
+        self._paper.place_forget()
+        for lbl in self._line_labels:
+            lbl.config(text='')
+        self._stamp_lbl.config(text='')
+        self._idle_lbl.config(text=message)
+        self._idle_lbl.place(relx=0.5, rely=0.55, anchor='center')
+
+    def show_static(self, lines, stamp=''):
+        """Show proof lines immediately (no animation)."""
+        self._cancel_jobs()
+        self._playing = False
+        self._idle_lbl.place_forget()
+        self._paper.place(relx=0.04, y=8, relwidth=0.92, height=self.PAPER_H)
+        for i, lbl in enumerate(self._line_labels):
+            lbl.config(text=lines[i] if i < len(lines) else '')
+        self._stamp_lbl.config(text=stamp or '')
 
     def play(self, stamp: str, lines=None, on_complete=None, duration_ms=900):
         """Animate receipt output; invoke on_complete when finished or skipped."""

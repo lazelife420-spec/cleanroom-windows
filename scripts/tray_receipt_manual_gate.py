@@ -33,6 +33,9 @@ def tray_smoke_only():
         def _tray_quit(self):
             self.calls.append('quit')
 
+        def _shutdown_app(self, *_a, **_k):
+            self.calls.append('quit')
+
         def open_last_receipt(self):
             self.calls.append('receipt')
 

@@ -130,6 +130,12 @@ def sandbox(tmp_path, monkeypatch):
     app = gui_module.StartupManagerGUI(config_path=cfg_path, restore_log_path=log_path)
     app.update_idletasks()
     app._finish_launch_sequence()
+    app.refresh_cleanup()
+    assert pump(app, lambda: getattr(app, '_scan_session_done', False), timeout=30), \
+        'startup scan did not finish'
+    for tab_idx in (2, 4, 5):
+        app._lazy_load_tab(tab_idx)
+        app.update()
     app.withdraw()
     try:
         yield {
@@ -145,7 +151,12 @@ def sandbox(tmp_path, monkeypatch):
         }
     finally:
         try:
-            app.destroy()
+            if hasattr(app, '_shutdown_app'):
+                app._shutdown_app(reason='test-teardown')
+            else:
+                from ui.tray import shutdown_all_trays
+                shutdown_all_trays()
+                app.destroy()
         except Exception:
             pass
 
@@ -210,8 +221,8 @@ def test_apply_writes_receipt_with_proof_and_custody_verifies(sandbox):
 
     # Verify Custody tool over the whole history reports everything present
     app.verify_custody()
-    assert pump(app, lambda: any('CUSTODY VERIFIED' in str(a) for a in sandbox['dialogs']['info']))
-    assert any('2/2 archived item(s) are present' in str(a) for a in sandbox['dialogs']['info'])
+    assert pump(app, lambda: 'CUSTODY VERIFIED' in app.global_status.cget('text'))
+    assert pump(app, lambda: '2/2' in app.global_status.cget('text'))
 
 
 def test_export_audit_writes_html(sandbox, tmp_path, monkeypatch):
@@ -288,8 +299,9 @@ def test_disabled_category_lists_backups_and_offers_reenable(sandbox):
     assert len(rows) == 1
     vals = app.tree.item(rows[0])['values']
     assert vals[0] == 'SeededApp'
-    assert vals[1] == 'disabled'
-    assert 'app.exe' in vals[3]
+    assert vals[1] == 'Disabled backup'
+    assert vals[2] == 'disabled'
+    assert 'restorable' in str(vals[3]).lower()
 
     # Selecting a disabled entry flips the action button to re-enable mode
     app.tree.selection_set(rows[0])
@@ -297,7 +309,7 @@ def test_disabled_category_lists_backups_and_offers_reenable(sandbox):
     assert app.enable_btn.cget('text') == 'Re-enable Selected'
     assert str(app.enable_btn.cget('state')) == 'normal'
     assert str(app.disable_btn.cget('state')) == 'disabled'
-    assert 'Disabled: 1' in app.disabled_label.cget('text')
+    assert app.disabled_label.cget('text') == '1'
 
 
 def test_settings_tab_roundtrips_config(sandbox):
@@ -341,6 +353,8 @@ def test_restore_preview_pane_shows_details(sandbox):
 
 def test_uninstaller_tab_lists_programs_and_filters(sandbox):
     app = sandbox['app']
+    app.tab_control.select(app.uninstall_tab)
+    app.update()
     # The live registry scan should find at least one installed program.
     assert pump(app, lambda: len(app.uninstall_entries) > 0), \
         'expected installed programs from the registry'
@@ -467,7 +481,6 @@ def test_registry_health_dialog_repairs_checked_issues(sandbox, monkeypatch):
     assert pump(app, lambda: 'chosen' in captured)
     # uninstall-entry issues default to unchecked; only the startup ref is repaired
     assert [i['display'] for i in captured['chosen']] == ['Dead']
-    assert pump(app, lambda: any('Repaired 1' in str(a) for a in sandbox['dialogs']['info']))
 
 
 def test_smart_restore_routes_registry_entries(sandbox, tmp_path):

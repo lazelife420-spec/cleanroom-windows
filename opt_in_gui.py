@@ -7,9 +7,9 @@ from pathlib import Path
 CFG = Path(__file__).parent / 'cleanup_config.yaml'
 
 MESSAGE = (
-    "Cleanroom would like to collect anonymous local usage events to help improve reliability.\n"
-    "No personal files or contents are uploaded. Data is stored locally unless you opt-in to sharing.\n\n"
-    "Enable local telemetry (usage_log.json)?"
+    "Cleanroom can optionally record anonymous local usage events to help improve reliability.\n"
+    "No personal files or contents leave this PC. Data stays local unless you opt in to sharing.\n\n"
+    "Enable local diagnostics logging (usage_log.json)?"
 )
 
 
@@ -33,24 +33,24 @@ def set_telemetry(enable: bool):
 def on_enable():
     ok = set_telemetry(True)
     if ok:
-        messagebox.showinfo('Telemetry', 'Telemetry enabled (local only).')
+        messagebox.showinfo('Diagnostics', 'Local diagnostics logging enabled.')
     else:
-        messagebox.showerror('Telemetry', 'Failed to update configuration.')
+        messagebox.showerror('Diagnostics', 'Failed to update configuration.')
     root.destroy()
 
 
 def on_disable():
     ok = set_telemetry(False)
     if ok:
-        messagebox.showinfo('Telemetry', 'Telemetry disabled.')
+        messagebox.showinfo('Diagnostics', 'Local diagnostics logging disabled.')
     else:
-        messagebox.showerror('Telemetry', 'Failed to update configuration.')
+        messagebox.showerror('Diagnostics', 'Failed to update configuration.')
     root.destroy()
 
 if __name__ == '__main__':
     root = tk.Tk()
     root.withdraw()
-    if messagebox.askyesno('Cleanroom — Telemetry', MESSAGE):
+    if messagebox.askyesno('Cleanroom — Diagnostics', MESSAGE):
         on_enable()
     else:
         on_disable()
