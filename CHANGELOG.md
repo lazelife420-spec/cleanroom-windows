@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-06-15 — v1.0.5 proof dashboard consolidation
+
+- **Proof dashboard** — Home, Cleaner, Archive, and Proof Ledger hierarchy polish; scan lifecycle UX hardening.
+- **R.E.C.E.I.P.T. identity** — Branded receipt viewer with module/action badges (Preview, Archive Complete, etc.).
+- **Scan lifecycle** — Animated scan progress, Stop Scan, rescan reset, receipt-ready gating on Home and Cleaner.
+- **Archive custody truth** — Loading card/footer agree; stats show `…` while busy; restore/delete gated until loaded.
+- **Context menus** — Right-click actions on Home recommendations, Cleaner candidates, Archive custody, Proof Ledger.
+- **Force Remove guardrails** — Confirmation copy, eligibility checks, proof-log intent (no silent destructive paths).
+- **Cleanroom → RECEIPT bridge** — Optional “Open in RECEIPT” hand-off from receipt viewer (PR #27).
+
 ## 2026-06-12 — v1.0.4 Windows shell UX (tray + receipt file type)
 
 - Responsive layout fix so important controls stay visible at common sizes and 150% scaling.
