@@ -70,6 +70,11 @@ def _seed_demo_log(scan: Path, archive: Path, log_path: Path):
     return log_path
 
 
+def _disable_tray_init(gui_module):
+    """Gate capture: tray is tested elsewhere; skip init for reliable CI teardown."""
+    gui_module.StartupManagerGUI._init_tray = lambda self, attempt=0: None
+
+
 def capture_gui_screenshots():
     os.environ['CLEANROOM_DISABLE_ANIMATIONS'] = '1'
     import receipts as receipts_module
@@ -80,6 +85,7 @@ def capture_gui_screenshots():
     for fn in ('showinfo', 'showwarning', 'showerror', 'askyesno'):
         setattr(messagebox, fn, lambda *a, **k: True if fn == 'askyesno' else None)
     gui_module.StartupManagerGUI._show_proof_report = lambda *a, **k: None
+    _disable_tray_init(gui_module)
 
     tmp = _demo_root()
     scan = tmp / 'scan'
