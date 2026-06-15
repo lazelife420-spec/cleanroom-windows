@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import re
 import tkinter as tk
+from tkinter import messagebox
 
 import customtkinter as ctk
 
@@ -59,10 +60,16 @@ class ReceiptViewerDialog:
         muted='#9ca3af',
         border='#39414e',
         on_accent='#ffffff',
+        receipt_available=False,
+        open_in_receipt=None,
         **_kwargs,
     ):
         self._receipt_path = receipt_path
         self._text_body = text or ''
+        # Optional hand-off to the standalone RECEIPT proof viewer. The button
+        # stays hidden unless RECEIPT is available AND we have a file on disk.
+        self._open_in_receipt_cb = open_in_receipt
+        self._receipt_available = bool(receipt_available)
         colors = dict(
             bg=bg, card=card, accent=accent, text=text_fg,
             muted=muted, border=border, on_accent=on_accent, head=card,
@@ -159,6 +166,9 @@ class ReceiptViewerDialog:
         if receipt_path:
             self._modal.add_button('Open Receipt File', self._open_file, side='left')
             self._modal.add_button('Open Receipt Folder', self._open_folder, side='left')
+            # Hidden entirely unless RECEIPT is available — no disabled button.
+            if self._receipt_available and self._open_in_receipt_cb:
+                self._modal.add_button('Open in RECEIPT', self._open_in_receipt, side='left')
         self._modal.add_button('Close', self._modal.close, primary=True)
 
     def _summarize_body(self, meta: dict, ctx: dict) -> str:
@@ -202,6 +212,19 @@ class ReceiptViewerDialog:
                 os.startfile(folder)
             except OSError:
                 pass
+
+    def _open_in_receipt(self):
+        if not self._open_in_receipt_cb or not self._receipt_path:
+            return
+        ok, err = self._open_in_receipt_cb(str(self._receipt_path))
+        if not ok:
+            detail = err or 'RECEIPT could not be opened.'
+            messagebox.showinfo(
+                'Open in RECEIPT',
+                f"{detail}\n\n"
+                "Cleanroom's built-in receipt view is still fully available here. "
+                "RECEIPT is an optional, local-only proof viewer — nothing is "
+                "uploaded.")
 
 
 def show_receipt(parent, text, receipt_path=None, preview=False, **kwargs):
