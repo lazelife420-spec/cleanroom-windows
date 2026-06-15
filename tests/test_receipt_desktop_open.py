@@ -6,6 +6,18 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+# Headless CI may lack tk; skip viewer-instantiation tests gracefully.
+_HAS_DISPLAY = True
+try:
+    import customtkinter as ctk  # noqa: F401
+    _root = ctk.CTk()
+    _root.destroy()
+except Exception:
+    _HAS_DISPLAY = False
+
+_needs_display = pytest.mark.skipif(
+    not _HAS_DISPLAY, reason='requires a display (tk available)')
+
 
 class TestAppCLI:
     def test_parse_args_no_flags(self):
@@ -116,8 +128,96 @@ class TestParseThenDisplay:
         assert s.trust_display == 'Unknown'
 
 
+@_needs_display
+class TestCustodySummary:
+    """Tests for the _build_custody_summary_text output."""
+
+    def _app_with_cleanup(self, tmp_path, monkeypatch):
+        monkeypatch.setattr('customtkinter.CTk.mainloop', lambda s: None)
+
+        from receipt_core import render
+        from brand import APP_MOTTO
+        from receipt_desktop.viewer import ReceiptViewerApp as App
+
+        f = tmp_path / 'receipt.cleanroom-receipt'
+        f.write_text(
+            render.format_receipt(
+                [{'src': 'C:\\x.txt', 'dest': 'C:\\x2.txt',
+                  'reason': 'large-file', 'size': 100,
+                  'when': '2026-01-01T00:00:00'}],
+                motto=APP_MOTTO,
+            ),
+            encoding='utf-8',
+        )
+        app = App()
+        app.load_receipt(str(f))
+        return app
+
+    def _app_with_prune(self, tmp_path, monkeypatch):
+        monkeypatch.setattr('customtkinter.CTk.mainloop', lambda s: None)
+
+        from receipt_core import render
+        from brand import APP_MOTTO
+        from receipt_desktop.viewer import ReceiptViewerApp as App
+
+        f = tmp_path / 'prune_receipt.cleanroom-receipt'
+        f.write_text(
+            render.format_prune_receipt(
+                [{'dest': r'C:\arch\x.zip', 'size': 1024}],
+                motto=APP_MOTTO,
+            ),
+            encoding='utf-8',
+        )
+        app = App()
+        app.load_receipt(str(f))
+        return app
+
+    def test_prune_receipt_says_pruned(self, tmp_path, monkeypatch):
+        app = self._app_with_prune(tmp_path, monkeypatch)
+        text = app._build_custody_summary_text()
+        assert 'Pruned by receipt' in text
+        assert 'n/a' in text
+        app.destroy()
+
+    def test_cleanup_with_gaps_produces_summary(self, tmp_path, monkeypatch):
+        app = self._app_with_cleanup(tmp_path, monkeypatch)
+        text = app._build_custody_summary_text()
+        assert 'RECEIPT Custody Summary' in text
+        assert 'Trust:' in text
+        app.destroy()
+
+    def test_summary_includes_trust_score(self, tmp_path, monkeypatch):
+        app = self._app_with_cleanup(tmp_path, monkeypatch)
+        text = app._build_custody_summary_text()
+        assert 'Trust:' in text
+        app.destroy()
+
+    def test_summary_for_partial_receipt(self, tmp_path, monkeypatch):
+        monkeypatch.setattr('customtkinter.CTk.mainloop', lambda s: None)
+        from receipt_desktop.viewer import ReceiptViewerApp as App
+
+        f = tmp_path / 'unknown.cleanroom-receipt'
+        f.write_text('Random content, not a receipt.', encoding='utf-8')
+
+        app = App()
+        app.load_receipt(str(f))
+        text = app._build_custody_summary_text()
+        assert 'Unknown' in text or 'Partial' in text
+        app.destroy()
+
+    def test_summary_no_receipt_loaded(self, monkeypatch):
+        monkeypatch.setattr('customtkinter.CTk.mainloop', lambda s: None)
+        from receipt_desktop.viewer import ReceiptViewerApp as App
+
+        app = App()
+        text = app._build_custody_summary_text()
+        assert 'No receipt loaded' in text
+        app.destroy()
+
+
+@_needs_display
 class TestViewerNoTk:
-    """Tests that do NOT require a display — state/logic only."""
+    """Tests that require importing ReceiptViewerApp (needs tk)."""
 
     def test_viewer_app_can_instantiate_minimal(self, monkeypatch):
         """Smoke: ReceiptViewerApp.__init__ without launching mainloop."""

@@ -150,26 +150,54 @@ class ReceiptViewerApp(ctk.CTk):
 
         # --- Custody tab ---
         c_ = self._tabs.tab('Custody')
-        self._cust_header = ctk.CTkLabel(
-            c_, text='No receipt loaded', text_color=_P['MUTED'],
-            font=_font(13), anchor='w',
-        )
-        self._cust_header.pack(anchor='w', padx=16, pady=(16, 8))
 
-        self._cust_trust = ctk.CTkLabel(
-            c_, text='', text_color=_P['PROOF'], font=_font(28, 'bold'),
-            anchor='center',
-        )
-        self._cust_trust.pack(anchor='center', pady=(8, 8))
+        self._cust_status_card = ctk.CTkFrame(c_, fg_color=_P['BG'], corner_radius=10)
+        self._cust_status_card.pack(fill='x', padx=16, pady=(16, 8))
 
-        self._cust_detail = ctk.CTkLabel(
-            c_, text='', text_color=_P['MUTED'], font=_font(11),
-            anchor='center', justify='center',
+        self._cust_status_badge = ctk.CTkLabel(
+            self._cust_status_card, text='No receipt loaded',
+            text_color=_P['MUTED'], font=_font(14, 'bold'), anchor='w',
         )
-        self._cust_detail.pack(anchor='center', padx=16, pady=(0, 16))
+        self._cust_status_badge.pack(anchor='w', padx=16, pady=(12, 4))
 
-        self._cust_missing = ctk.CTkFrame(c_, fg_color=_P['BG'], corner_radius=8)
-        self._cust_missing.pack(fill='both', expand=True, padx=16, pady=(0, 16))
+        self._cust_status_trust = ctk.CTkLabel(
+            self._cust_status_card, text='',
+            text_color=_P['PROOF'], font=_font(32, 'bold'), anchor='w',
+        )
+        self._cust_status_trust.pack(anchor='w', padx=16, pady=(0, 8))
+
+        self._cust_status_explain = ctk.CTkLabel(
+            self._cust_status_card, text='',
+            text_color=_P['MUTED'], font=_font(11), anchor='w',
+            wraplength=660, justify='left',
+        )
+        self._cust_status_explain.pack(anchor='w', padx=16, pady=(0, 12))
+
+        # counts bar
+        self._cust_counts_frame = ctk.CTkFrame(c_, fg_color=_P['CARD'])
+        self._cust_counts_frame.pack(fill='x', padx=16, pady=(0, 4))
+        self._cust_counts_labels: list[ctk.CTkLabel] = []
+
+        # missing items section
+        self._cust_missing_frame = ctk.CTkFrame(
+            c_, fg_color=_P['BG'], corner_radius=8)
+        self._cust_missing_frame.pack(fill='both', expand=True, padx=16, pady=(4, 4))
+
+        self._cust_missing_list = ctk.CTkFrame(
+            self._cust_missing_frame, fg_color='transparent')
+        self._cust_missing_list.pack(fill='both', expand=True, padx=0, pady=(4, 0))
+
+        # copy button
+        btn_row = ctk.CTkFrame(c_, fg_color='transparent')
+        btn_row.pack(fill='x', padx=16, pady=(4, 12))
+
+        self._cust_copy_btn = ctk.CTkButton(
+            btn_row, text='Copy Custody Summary', command=self._copy_custody,
+            fg_color=_P['HEAD'], hover_color=_P['ACCENT_SOFT'],
+            text_color=_P['TEXT'], font=_font(10), corner_radius=6,
+            height=28,
+        )
+        self._cust_copy_btn.pack(side='left')
 
         # --- Raw Receipt tab ---
         r = self._tabs.tab('Raw Receipt')
@@ -378,53 +406,152 @@ class ReceiptViewerApp(ctk.CTk):
     # custody tab
     # ------------------------------------------------------------------
 
+    _CUSTODY_COPY = {
+        CustodyStatus.VERIFIED: (
+            'Verified', 'Custody verified',
+            'All referenced archive artifacts are present.',
+            _P['PROOF'],
+        ),
+        CustodyStatus.GAPS_DETECTED: (
+            'Gaps detected', 'Custody gaps detected',
+            'Some referenced archive artifacts are missing. This usually '
+            'means they were pruned, moved, or deleted outside the producer app.',
+            _P['DANGER'],
+        ),
+        CustodyStatus.NO_ARTIFACT_PATHS: (
+            'Partial receipt', 'Partial receipt',
+            'This older receipt does not include enough structured '
+            'artifact data for a full custody check.',
+            _P['MUTED'],
+        ),
+        CustodyStatus.UNKNOWN: (
+            'Unknown', 'Unknown',
+            'Unable to determine custody status — no proof data available.',
+            _P['MUTED'],
+        ),
+    }
+
     def _render_custody(self):
-        state = self._state
-        result = state.result
-        if result is None:
+        receipt = self._state.receipt
+        result = self._state.result
+        if result is None or receipt is None:
             return
 
+        is_pruned = receipt.receipt_type == ReceiptType.PRUNE
         status = result.custody_status
-        self._cust_trust.configure(text=state.trust_display)
+        trust = self._state.trust_display
 
-        if status == CustodyStatus.VERIFIED:
-            self._cust_header.configure(
-                text='Custody verified', text_color=_P['PROOF'])
-            self._cust_detail.configure(
-                text='All referenced archive artifacts are present.')
-            self._cust_trust.configure(text_color=_P['PROOF'])
-        elif status == CustodyStatus.GAPS_DETECTED:
-            self._cust_header.configure(
-                text='Custody gaps detected', text_color=_P['DANGER'])
-            self._cust_detail.configure(
-                text=f'{result.missing_count}/{result.total_count} artifact(s) '
-                     f'missing from the archive.\n'
-                     f'This usually means they were pruned, moved, or deleted '
-                     f'outside the producer app.')
-            self._cust_trust.configure(text_color=_P['DANGER'])
-        elif status == CustodyStatus.NO_ARTIFACT_PATHS:
-            self._cust_header.configure(
-                text='Partial receipt', text_color=_P['MUTED'])
-            self._cust_detail.configure(
-                text='This receipt does not include enough structured '
-                     'artifact data for a full custody check.')
-            self._cust_trust.configure(text_color=_P['MUTED'])
+        if is_pruned:
+            badge = 'Pruned by receipt'
+            title = 'Pruned by receipt'
+            explain = (
+                'This receipt records a prune action. Archived copies '
+                'were permanently removed from the archive, so custody '
+                'verification does not apply to pruned items.'
+            )
+            color = _P['MUTED']
         else:
-            self._cust_header.configure(
-                text='Unknown', text_color=_P['MUTED'])
-            self._cust_detail.configure(
-                text='Unable to determine custody status.')
+            _, title, explain, color = self._CUSTODY_COPY.get(
+                status, self._CUSTODY_COPY[CustodyStatus.UNKNOWN])
+            badge = title
 
-        for w in self._cust_missing.winfo_children():
+        self._cust_status_badge.configure(text=badge, text_color=color)
+        self._cust_status_trust.configure(
+            text=trust, text_color=color if trust != '100/100' else _P['PROOF'])
+        self._cust_status_explain.configure(text=explain, text_color=_P['MUTED'])
+
+        # counts
+        for lbl in self._cust_counts_labels:
+            lbl.destroy()
+        self._cust_counts_labels.clear()
+
+        if not is_pruned and result.total_count > 0:
+            counts = ctk.CTkFrame(
+                self._cust_counts_frame, fg_color='transparent')
+            counts.pack(fill='x', padx=16, pady=8)
+            self._cust_counts_labels.append(counts)
+
+            for col, val, col_color in (
+                ('Verified', str(result.verified_count), _P['PROOF']),
+                ('Missing', str(result.missing_count),
+                 _P['DANGER'] if result.missing_count > 0 else _P['MUTED']),
+                ('Total', str(result.total_count), _P['TEXT']),
+            ):
+                ctk.CTkLabel(
+                    counts, text=f'{col}: {val}',
+                    text_color=col_color, font=_font(11, 'bold'),
+                ).pack(side='left', padx=(0, 24))
+
+        # missing items list
+        for w in self._cust_missing_list.winfo_children():
             w.destroy()
         if result.errors:
             for e in result.errors:
                 color = _P['DANGER'] if 'missing:' in e else _P['MUTED']
                 ctk.CTkLabel(
-                    self._cust_missing, text=e,
+                    self._cust_missing_list, text=e,
                     text_color=color, font=_font(10),
                     anchor='w', justify='left',
                 ).pack(anchor='w', padx=12, pady=2)
+        elif is_pruned:
+            ctk.CTkLabel(
+                self._cust_missing_list,
+                text='No custody gaps — this is a prune receipt.',
+                text_color=_P['MUTED'], font=_font(10),
+                anchor='w', justify='left',
+            ).pack(anchor='w', padx=12, pady=8)
+
+    def _build_custody_summary_text(self) -> str:
+        """Build a human-readable custody summary for clipboard."""
+        state = self._state
+        receipt = state.receipt
+        result = state.result
+        if result is None or receipt is None:
+            return 'No receipt loaded.'
+
+        status = result.custody_status
+        is_pruned = receipt.receipt_type == ReceiptType.PRUNE
+        trust = state.trust_display
+
+        if is_pruned:
+            return (
+                f'RECEIPT Custody Summary\n'
+                f'========================\n'
+                f'Status:   Pruned by receipt\n'
+                f'Trust:    {trust}\n'
+                f'\n'
+                f'This receipt records a prune action. Archived copies '
+                f'were permanently removed from the archive.'
+            )
+
+        _, title, explain, _ = self._CUSTODY_COPY.get(
+            status, self._CUSTODY_COPY[CustodyStatus.UNKNOWN])
+
+        lines = [
+            'RECEIPT Custody Summary',
+            '========================',
+            f'Status:   {title}',
+            f'Trust:    {trust}',
+        ]
+        if result.total_count > 0:
+            lines.append(f'Verified: {result.verified_count}/{result.total_count}')
+            lines.append(f'Missing:  {result.missing_count}/{result.total_count}')
+        lines.append('')
+        lines.append(explain)
+        if result.errors:
+            lines.append('')
+            for e in result.errors:
+                lines.append(e)
+        return '\n'.join(lines)
+
+    def _copy_custody(self) -> None:
+        text = self._build_custody_summary_text()
+        try:
+            self.clipboard_clear()
+            self.clipboard_append(text)
+            self.update_idletasks()
+        except tk.TclError:
+            pass  # clipboard unavailable — silently ignore
 
     # ------------------------------------------------------------------
     # raw tab
