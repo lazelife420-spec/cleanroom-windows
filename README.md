@@ -16,11 +16,29 @@ Repository: [`cleanroom-windows`](https://github.com/Z3r0DayZion-install/cleanro
 
 **Latest release:** [Cleanroom v1.0.4](https://github.com/Z3r0DayZion-install/cleanroom-windows/releases/tag/v1.0.4) — `Cleanroom-Setup-1.0.4.exe` + `SHA256SUMS.txt` (CI-built, attestable)
 
-![Cleanroom Review](https://github.com/Z3r0DayZion-install/cleanroom-windows/releases/download/v1.0.4/cleanroom-review.png)
+**Next:** v1.0.5 release prep on branch `release/v1.0.5-prep` — proof dashboard consolidation (not tagged yet).
 
-![Cleanroom Activity Ledger](https://github.com/Z3r0DayZion-install/cleanroom-windows/releases/download/v1.0.4/cleanroom-activity-ledger.png)
+![Cleanroom Review](https://github.com/Z3r0DayZion-install/cleanroom-windows/releases/download/v1.0.5/cleanroom-review.png)
 
-![Cleanroom Proof Pack Demo](https://github.com/Z3r0DayZion-install/cleanroom-windows/releases/download/v1.0.4/cleanroom-proof-pack-demo.png)
+![Cleanroom Activity Ledger](https://github.com/Z3r0DayZion-install/cleanroom-windows/releases/download/v1.0.5/cleanroom-activity-ledger.png)
+
+![Cleanroom Proof Pack Demo](https://github.com/Z3r0DayZion-install/cleanroom-windows/releases/download/v1.0.5/cleanroom-proof-pack-demo.png)
+
+---
+
+## What's new in v1.0.5 (release prep)
+
+| Area | What you get |
+|------|----------------|
+| **Proof dashboard** | Home / Cleaner / Archive / Proof Ledger hierarchy and CTA polish |
+| **R.E.C.E.I.P.T.** | Branded receipt viewer — Preview, Archive Complete, module/action identity |
+| **Scan lifecycle** | Progress ring, Stop Scan, rescan reset, receipt-ready gating |
+| **Archive custody** | Loading truthfulness, footer guards, action states until loaded |
+| **Context menus** | Right-click on recommendations, candidates, custody rows, ledger rows |
+| **Force Remove** | Guarded confirmation and eligibility checks |
+| **Open in RECEIPT** | Optional hand-off from receipt viewer (PR #27) |
+
+Full release notes: [`docs/RELEASE-v1.0.5.md`](docs/RELEASE-v1.0.5.md)
 
 ---
 
@@ -48,7 +66,7 @@ Full release notes: [`docs/RELEASE-v1.0.4.md`](docs/RELEASE-v1.0.4.md)
 | No undo | **Cleanroom Rewind** — roll back a whole day |
 | Fake "space freed" totals | **OS-measured** free-space before/after |
 | Scare tactics | **Custody Trust Score** — verify artifacts on disk |
-| Closed source, bundled junk | Open source, **160+ tests**, local-only |
+| Closed source, bundled junk | Open source, **347+ tests**, local-only |
 
 ---
 
@@ -94,7 +112,7 @@ python -m pytest -p no:xonsh tests/
 powershell -ExecutionPolicy Bypass -File build_exe.ps1
 powershell -ExecutionPolicy Bypass -File build_installer.ps1
 # -> dist\Cleanroom\Cleanroom.exe
-# -> dist\Cleanroom-Setup-1.0.4.exe
+# -> dist\Cleanroom-Setup-1.0.5.exe
 ```
 
 ### Verify provenance

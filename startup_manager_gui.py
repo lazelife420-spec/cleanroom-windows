@@ -8086,7 +8086,7 @@ class StartupManagerGUI(ctk.CTk):
                 with PILImage.open(path) as img:
                     img = img.convert('RGBA')
                     img.thumbnail((max_w, max_h), PILImage.LANCZOS)
-                    self._show_preview_photo(PILImageTk.PhotoImage(img))
+                    self._show_preview_photo(PILImageTk.PhotoImage(img, master=self))
                 return
             except Exception:
                 self._set_preview_message('Unable to render image preview.')
@@ -9108,12 +9108,12 @@ def open_receipt_standalone(path_str):
 
             def _close():
                 try:
-                    dlg.destroy()
+                    dlg._modal.close()
                 except Exception:
                     pass
                 root.quit()
 
-            dlg.protocol('WM_DELETE_WINDOW', _close)
+            dlg._modal.win.protocol('WM_DELETE_WINDOW', _close)
             root.mainloop()
         else:
             messagebox.showerror('Receipt', 'Receipt viewer unavailable.', parent=root)

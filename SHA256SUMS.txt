@@ -1,2 +1,3 @@
-# Cleanroom v1.0.4 release checksums (SHA256)
-# Populated by CI at release - verify against GitHub Release assets
+# Cleanroom v1.0.5 release checksums (SHA256)
+60EFE0716F07D4CB56C98DFCBAC21046FEF029D92EAA635A73AD5ABA2D61ABB8  Cleanroom-Setup-1.0.5.exe
+CEDA6CE9778F51FC6581A44C7AABCC1D8C5A1D3BC9BEAD922F7078BBD788551E  Cleanroom/Cleanroom.exe
