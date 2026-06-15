@@ -300,7 +300,15 @@ def run_scaling_gates(tk_scaling: float = 1.0) -> int:
             else:
                 _ok(f'150% tk scaling layout gate passed at 1080x700 (scaling={tk_scaling})')
     finally:
-        app.destroy()
+        if hasattr(app, '_shutdown_app'):
+            app._shutdown_app(reason='ui-merge-gate')
+        else:
+            from ui.tray import shutdown_all_trays
+            shutdown_all_trays()
+            try:
+                app.destroy()
+            except Exception:
+                pass
 
     if all_issues:
         print(f'\nScaling gate FAILED ({len(all_issues)} issue(s))', file=sys.stderr)

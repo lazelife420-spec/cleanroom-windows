@@ -145,7 +145,12 @@ def capture_gui_screenshots():
     time.sleep(0.4)
     _grab_window(app, OUT / 'cleanroom-activity-ledger.png')
 
-    app.destroy()
+    if hasattr(app, '_shutdown_app'):
+        app._shutdown_app(reason='screenshot-capture')
+    else:
+        from ui.tray import shutdown_all_trays
+        shutdown_all_trays()
+        app.destroy()
 
 
 def capture_proof_pack_html():
