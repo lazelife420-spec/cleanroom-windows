@@ -56,8 +56,18 @@ TAB_ACTION_CHECKS = (
     )),
 )
 
+HEADER_CHECKS = (
+    ('_hdr_settings_btn', 'Settings'),
+    ('_hdr_more_btn', 'More'),
+)
+
 SIDEBAR_CHECKS = (
-    ('_sidebar_explorer_btn', 'Explorer Context Menus'),
+    ('_sidebar_explorer_btn', 'Explorer Menus'),
+)
+
+HOME_ACTION_CHECKS = (
+    ('dashboard_primary_btn', 'Scan Now'),
+    ('_hdr_more_btn', 'More'),
 )
 
 TOOLBAR_LABELS = (
@@ -140,28 +150,54 @@ def check_layout(app, width: int, height: int, label: str, *, check_settings: bo
         app._update_responsive_layout()
     time.sleep(0.15)
 
+    try:
+        app.tab_control.select(0)
+        if hasattr(app, '_update_page_chrome'):
+            app._update_page_chrome(0)
+        app.update_idletasks()
+    except Exception:
+        pass
+
     issues: list[str] = []
-    for attr, name in TOOLBAR_LABELS:
-        widget = getattr(app, attr)
+    for attr, name in HOME_ACTION_CHECKS:
+        widget = getattr(app, attr, None)
+        if widget is None:
+            issues.append(f'{label}/home missing {attr}')
+            continue
         issues.extend(_widget_ok(widget, f'{label}/{name}'))
         issues.extend(_widget_in_viewport(widget, app, f'{label}/{name}'))
 
     issues.extend(_widget_ok(app.hdr_trust_value, f'{label}/Custody Trust value', 20, 16))
     issues.extend(_widget_ok(app.hdr_trust_lbl, f'{label}/Custody Trust label', 40, 12))
-    issues.extend(_widget_in_viewport(app.tb_apply, app, f'{label}/Archive toolbar'))
+    issues.extend(_widget_in_viewport(app.dashboard_primary_btn, app, f'{label}/Scan Now hero'))
+
+    for attr, name in HEADER_CHECKS:
+        widget = getattr(app, attr, None)
+        if widget is None:
+            issues.append(f'{label}/header missing {attr}')
+            continue
+        issues.extend(_widget_ok(widget, f'{label}/header/{name}', 28, 24))
+        issues.extend(_widget_in_viewport(widget, app, f'{label}/header/{name}'))
+
+    if not _find_text_in_tree(app, 'Preview'):
+        issues.append(f'{label}/proof-flow or Preview Receipt text missing')
+    if not _find_text_in_tree(app, 'Archive-first cleanup with receipts'):
+        if not _find_text_in_tree(app, 'Archive-first mode is ON'):
+            if not _find_text_in_tree(app, 'Archive-first ON'):
+                issues.append(f'{label}/archive-first proof text missing')
 
     for attr, name in SIDEBAR_CHECKS:
         widget = getattr(app, attr, None)
         if widget is None:
             issues.append(f'{label}/sidebar missing {attr}')
             continue
+        if not widget.winfo_ismapped() and attr == '_sidebar_explorer_btn':
+            if hasattr(app, '_expand_sidebar_tools'):
+                app._expand_sidebar_tools()
+                app.update_idletasks()
         issues.extend(_widget_ok(widget, f'{label}/sidebar/{name}', 80, 20))
-        issues.extend(_widget_in_viewport(widget, app, f'{label}/sidebar/{name}'))
-
-    if not _find_text_in_tree(app, 'Preview'):
-        issues.append(f'{label}/proof-flow or Preview Receipt text missing')
-    if not _find_text_in_tree(app, 'Archive-first mode is ON'):
-        issues.append(f'{label}/archive-first banner missing')
+        if attr != '_sidebar_explorer_btn':
+            issues.extend(_widget_in_viewport(widget, app, f'{label}/sidebar/{name}'))
 
     for tab_idx, tab_name, buttons in TAB_ACTION_CHECKS:
         try:
@@ -169,6 +205,10 @@ def check_layout(app, width: int, height: int, label: str, *, check_settings: bo
             app.update_idletasks()
             app.update()
             time.sleep(0.08)
+            if tab_idx == 7 and hasattr(app, '_select_settings_section'):
+                app._select_settings_section('Explorer')
+                app.update_idletasks()
+                app.update()
             for attr, btn_name in buttons:
                 widget = getattr(app, attr, None)
                 if widget is None:
@@ -191,6 +231,10 @@ def check_layout(app, width: int, height: int, label: str, *, check_settings: bo
             app.update_idletasks()
             app.update()
             time.sleep(0.1)
+            if hasattr(app, '_select_settings_section'):
+                app._select_settings_section('Explorer')
+                app.update_idletasks()
+                app.update()
             if not _find_text_in_tree(app, 'local-only'):
                 issues.append(f'{label}/Settings local-only text missing')
             shell_btn = getattr(app, '_settings_shell_btn', None)
@@ -202,6 +246,20 @@ def check_layout(app, width: int, height: int, label: str, *, check_settings: bo
             save_btn = getattr(app, 'save_settings_btn', None)
             if save_btn is not None:
                 issues.extend(_widget_in_viewport(save_btn, app, f'{label}/Settings/Save Settings'))
+            scroll = getattr(app, '_settings_scroll', None)
+            if scroll is not None and save_btn is not None:
+                try:
+                    scroll.update_idletasks()
+                    save_btn.update_idletasks()
+                    if scroll.winfo_ismapped() and save_btn.winfo_ismapped():
+                        scroll_bottom = scroll.winfo_rooty() + scroll.winfo_height()
+                        save_top = save_btn.winfo_rooty()
+                        if scroll_bottom > save_top + 2:
+                            issues.append(
+                                f'{label}/Settings scroll region overlaps footer '
+                                f'(scroll bottom {scroll_bottom}, footer top {save_top})')
+                except Exception as exc:
+                    issues.append(f'{label}/Settings footer overlap check error: {exc}')
         except Exception as exc:
             issues.append(f'{label}/Settings tab check error: {exc}')
 

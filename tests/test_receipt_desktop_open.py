@@ -6,12 +6,12 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-# Headless CI may have a broken/partial tk install; probe widget creation.
+
 def _tk_works() -> bool:
     try:
         import customtkinter as ctk
         root = ctk.CTk()
-        ctk.CTkButton(root, text='probe')  # loads tk button.tcl
+        ctk.CTkButton(root, text='probe')
         root.update_idletasks()
         root.destroy()
         return True
@@ -19,10 +19,9 @@ def _tk_works() -> bool:
         return False
 
 
-_HAS_DISPLAY = _tk_works()
-
 _needs_display = pytest.mark.skipif(
-    not _HAS_DISPLAY, reason='requires a display (tk available)')
+    not _tk_works(), reason='requires a working tk install (headless CI may lack button.tcl)',
+)
 
 
 def _make_viewer_app(monkeypatch, receipt_path=None):

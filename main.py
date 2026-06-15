@@ -2,11 +2,20 @@
 import argparse
 import fnmatch
 import json
+import logging
 import os
 import shutil
 import sys
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
+
+SCAN_PROGRESS_EVERY_FILES = 50
+SLOW_FOLDER_SECONDS = 30.0
+FOLDER_FILE_BUDGET = 25000
+SLOW_FOLDER_FILE_WARN = 10000
 
 try:
     import yaml
@@ -129,24 +138,143 @@ def load_config(path):
 def is_older_than(p: Path, days: int):
     return datetime.fromtimestamp(p.stat().st_mtime) < (datetime.now() - timedelta(days=days))
 
-def scan_candidates(cfg):
-    candidates = []
-    paths = cfg.get('paths', [])
-    age_temp = cfg.get('age_days', {}).get('temp', 7)
-    age_installers = cfg.get('age_days', {}).get('installers', 30)
-    size_threshold = cfg.get('size_threshold_mb', 200) * 1024 * 1024
-    ext_archive = set(x.lower() for x in cfg.get('extensions_archive', []))
+def _path_is_under(path: Path, parent: Path) -> bool:
+    try:
+        path.resolve().relative_to(parent.resolve())
+        return True
+    except Exception:
+        return False
 
+
+def _scan_roots(cfg):
+    """Configured roots minus archive/custody dirs (not parent of log paths)."""
+    paths = cfg.get('paths', []) or []
     exclude_patterns = cfg.get('exclude_patterns', []) or []
-    whitelist = cfg.get('whitelist', []) or []
+    skip_roots: list[Path] = []
+    archive = cfg.get('archive_dir')
+    if archive:
+        skip_roots.append(Path(archive).expanduser())
+    try:
+        skip_roots.append(user_config_dir())
+    except Exception:
+        pass
+
+    roots: list[Path] = []
     for root in paths:
         rootp = Path(root).expanduser()
         if not rootp.exists():
             continue
         if _matches_patterns(str(rootp), exclude_patterns):
             continue
+        skip = False
+        for skip_root in skip_roots:
+            try:
+                if rootp.resolve() == skip_root.resolve() or _path_is_under(rootp, skip_root):
+                    skip = True
+                    break
+            except Exception:
+                continue
+        if not skip:
+            roots.append(rootp)
+    return roots
+
+
+def _emit_scan_progress(on_progress, state: dict) -> None:
+    if on_progress is None:
+        return
+    try:
+        on_progress(dict(state))
+    except Exception:
+        logger.debug('scan progress callback failed', exc_info=True)
+
+
+def scan_candidates(cfg, cancel_check=None, on_progress=None, skip_folder_check=None):
+    """Scan configured folders; optional cooperative cancel, skip-folder, and progress."""
+    candidates = []
+    age_temp = cfg.get('age_days', {}).get('temp', 7)
+    age_installers = cfg.get('age_days', {}).get('installers', 30)
+    size_threshold = cfg.get('size_threshold_mb', 200) * 1024 * 1024
+    ext_archive = set(x.lower() for x in cfg.get('extensions_archive', []))
+    exclude_patterns = cfg.get('exclude_patterns', []) or []
+    whitelist = cfg.get('whitelist', []) or []
+    roots = _scan_roots(cfg)
+    started = time.time()
+    folders_scanned = 0
+    files_checked = 0
+    files_since_emit = 0
+    cancelled = False
+    skipped_folders: list[str] = []
+    folder_file_counts: dict[str, int] = {}
+    folder_started: dict[str, float] = {}
+    summarized_folders: list[str] = []
+
+    def is_under_skipped(folder: str) -> bool:
+        fp = Path(folder)
+        for sf in skipped_folders:
+            try:
+                sp = Path(sf)
+                if fp == sp or _path_is_under(fp, sp):
+                    return True
+            except Exception:
+                continue
+        return False
+
+    def snapshot(current_folder: str = '') -> dict:
+        reclaimable = sum(c.get('size', 0) for c in candidates)
+        folder_count = folder_file_counts.get(current_folder, 0) if current_folder else 0
+        folder_elapsed = 0.0
+        if current_folder and current_folder in folder_started:
+            folder_elapsed = time.time() - folder_started[current_folder]
+        slow = (
+            bool(current_folder)
+            and (
+                folder_elapsed >= SLOW_FOLDER_SECONDS
+                or folder_count >= SLOW_FOLDER_FILE_WARN
+            )
+        )
+        return {
+            'started_at': started,
+            'elapsed_s': time.time() - started,
+            'folders_scanned': folders_scanned,
+            'files_checked': files_checked,
+            'candidates_found': len(candidates),
+            'reclaimable_bytes': reclaimable,
+            'reclaimable_label': human_size(reclaimable),
+            'current_folder': current_folder,
+            'folder_file_count': folder_count,
+            'folder_elapsed_s': folder_elapsed,
+            'slow_folder': slow,
+            'skipped_folders': list(skipped_folders),
+            'summarized_folders': list(summarized_folders),
+            'configured_roots': [str(p) for p in roots],
+            'exclude_patterns': list(exclude_patterns),
+            'stop_requested': bool(cancel_check and cancel_check()),
+            'cancelled': cancelled,
+        }
+
+    _emit_scan_progress(on_progress, snapshot())
+
+    for rootp in roots:
+        if cancel_check and cancel_check():
+            cancelled = True
+            break
+        folders_scanned += 1
+        folder_started[str(rootp)] = time.time()
+        _emit_scan_progress(on_progress, snapshot(str(rootp)))
         for f in rootp.rglob('*'):
+            if cancel_check and cancel_check():
+                cancelled = True
+                break
             if not f.is_file():
+                continue
+            parent = str(f.parent)
+            if is_under_skipped(parent):
+                continue
+            if skip_folder_check and skip_folder_check(parent):
+                skipped_folders.append(parent)
+                prog = snapshot(parent)
+                prog['folder_skipped'] = parent
+                _emit_scan_progress(on_progress, prog)
                 continue
             path_str = str(f)
             if _matches_patterns(path_str, exclude_patterns):
@@ -158,21 +286,46 @@ def scan_candidates(cfg):
                 size = f.stat().st_size
             except Exception:
                 continue
-            # zero-byte
+            if parent not in folder_started:
+                folder_started[parent] = time.time()
+            folder_file_counts[parent] = folder_file_counts.get(parent, 0) + 1
+            cnt = folder_file_counts[parent]
+            if cnt > FOLDER_FILE_BUDGET:
+                if parent not in summarized_folders:
+                    summarized_folders.append(parent)
+                    skipped_folders.append(parent)
+                    logger.info(
+                        'Summarized large folder (%d files): %s', cnt, parent)
+                    prog = snapshot(parent)
+                    prog['folder_summarized'] = parent
+                    _emit_scan_progress(on_progress, prog)
+                continue
+            files_checked += 1
+            files_since_emit += 1
+            if files_since_emit >= SCAN_PROGRESS_EVERY_FILES:
+                files_since_emit = 0
+                _emit_scan_progress(on_progress, snapshot(parent))
             if size == 0 and is_older_than(f, age_temp):
                 candidates.append({'path': path_str, 'reason': 'zero-byte', 'size': size})
                 continue
-            # partial downloads
             if f.name.endswith('.crdownload') and is_older_than(f, 7):
-                candidates.append({'path': str(f), 'reason': 'partial-download', 'size': size})
+                candidates.append({'path': path_str, 'reason': 'partial-download', 'size': size})
                 continue
-            # installers/archives older than installers age
             if ext in ext_archive and is_older_than(f, age_installers):
-                candidates.append({'path': str(f), 'reason': 'installer/archive', 'size': size})
+                candidates.append({'path': path_str, 'reason': 'installer/archive', 'size': size})
                 continue
-            # large files older than 7 days
             if size >= size_threshold and is_older_than(f, 7):
-                candidates.append({'path': str(f), 'reason': 'large-file', 'size': size})
+                candidates.append({'path': path_str, 'reason': 'large-file', 'size': size})
+        if cancelled:
+            break
+        elapsed_folder = time.time() - folder_started.get(str(rootp), started)
+        if elapsed_folder >= SLOW_FOLDER_SECONDS:
+            logger.info('Slow scan folder: %s (%.1fs)', rootp, elapsed_folder)
+
+    final = snapshot()
+    final['cancelled'] = cancelled or bool(cancel_check and cancel_check())
+    final['completed'] = True
+    _emit_scan_progress(on_progress, final)
     return candidates
 
 def human_size(n):

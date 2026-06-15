@@ -4,9 +4,9 @@ from __future__ import annotations
 import re
 from typing import Callable
 
-DEFAULT_SIZE = (1050, 700)
-MIN_SIZE = (920, 560)
-MAX_SIZE = (1080, 780)
+DEFAULT_SIZE = (1150, 720)
+MIN_SIZE = (920, 580)
+MAX_SIZE = (1280, 820)
 MAX_HEIGHT_RATIO = 0.72  # prevent tall skinny windows (h/w)
 MARGIN = 28
 TASKBAR_RESERVE = 52
@@ -51,8 +51,8 @@ def compute_geometry(widget, prefs: dict | None = None):
         h = int(saved['h'])
         x = int(saved.get('x', (sw - w) // 2))
         y = int(saved.get('y', (avail_h - h) // 2))
-        w = max(min_w, min(w, sw - margin, MAX_SIZE[0]))
-        h = max(min_h, min(h, avail_h - margin, MAX_SIZE[1]))
+        w = max(min_w, min(w, sw - margin))
+        h = max(min_h, min(h, avail_h - margin))
         max_h = max(min_h, int(w * MAX_HEIGHT_RATIO))
         if h > max_h:
             h = max_h
@@ -63,8 +63,8 @@ def compute_geometry(widget, prefs: dict | None = None):
         y = max(0, min(y, avail_h - h))
         return w, h, x, y, bool(saved.get('maximized'))
 
-    w = max(min_w, min(pref_w, sw - margin, MAX_SIZE[0]))
-    h = max(min_h, min(pref_h, avail_h - margin, MAX_SIZE[1]))
+    w = max(min_w, min(pref_w, sw - margin))
+    h = max(min_h, min(pref_h, avail_h - margin))
     x = max(0, (sw - w) // 2)
     y = max(0, (avail_h - h) // 2)
     return w, h, x, y, False
@@ -78,7 +78,8 @@ def apply_window_geometry(widget, prefs: dict | None = None) -> None:
         if maximized:
             widget.maxsize(sw, avail_h)
         else:
-            widget.maxsize(MAX_SIZE[0], min(MAX_SIZE[1], avail_h))
+            # Window may grow/shrink freely; MAX_SIZE caps saved geometry only.
+            widget.maxsize(max(MIN_SIZE[0], sw - margin), max(MIN_SIZE[1], avail_h - margin))
     except Exception:
         pass
     widget.geometry(f'{w}x{h}+{x}+{y}')

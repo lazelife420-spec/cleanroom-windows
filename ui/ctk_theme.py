@@ -11,15 +11,22 @@ LOCAL_ONLY_TEXT = (
 
 PROOF_FLOW_TEXT = 'Scan  →  Preview Receipt  →  Archive & Clean  →  Restore'
 
+# Product type scale (Segoe UI)
+TYPE_PAGE = 24
+TYPE_SECTION = 16
+TYPE_BODY = 12
+TYPE_TABLE = 11
+TYPE_MICRO = 10
+
 ARCHIVE_BANNER_TEXT = (
     'Archive-first mode is ON — Cleanroom moves files to archive before any removal.'
 )
 
 TAB_CONTEXT = (
     {
-        'title': 'Review',
-        'description': 'Proof dashboard — see what needs attention before you archive anything.',
-        'next': 'Open Cleaner → Scan, then Preview Receipt before Archive & Clean.',
+        'title': 'Home',
+        'description': 'Proof home — see custody status and choose your next archive-first action.',
+        'next': 'Click Scan to review cleanup candidates, then Preview Receipt before Archive & Clean.',
     },
     {
         'title': 'Activity',

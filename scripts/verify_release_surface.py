@@ -32,6 +32,11 @@ FORBIDDEN_UI_APPLY = re.compile(r"""text\s*=\s*['"][^'"]*\bApply\b[^'"]*['"]""")
 
 FORBIDDEN_UI_TERMS = FORBIDDEN_PUBLIC + ('Apply',)
 
+FORBIDDEN_UI_TELEMETRY = re.compile(
+    r"""(?:text\s*=\s*['"][^'"]*|(?:showinfo|showerror|askyesno)\(\s*['"])[^'"]*\bTelemetry\b""",
+    re.IGNORECASE,
+)
+
 ALLOWLIST_FILES = {
     ROOT / 'CHANGELOG.md',
     ROOT / 'HANDOFF.md',
@@ -181,6 +186,9 @@ def scan_forbidden_ui_labels() -> bool:
                 if term in line:
                     _fail(f'{rel}:{line_no} forbidden UI label {term!r}')
                     ok = False
+            if FORBIDDEN_UI_TELEMETRY.search(line):
+                _fail(f'{rel}:{line_no} forbidden user-facing Telemetry wording')
+                ok = False
     if ok:
         _ok('Forbidden UI label scan passed')
     return ok
