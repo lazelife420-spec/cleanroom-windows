@@ -61,6 +61,7 @@ from tkinter import ttk, messagebox, filedialog
 import threading
 import subprocess
 import sys
+import signal
 import shutil
 import time
 from datetime import datetime
@@ -85,11 +86,6 @@ try:
     from ui.receipt_viewer import show_receipt
 except Exception:
     show_receipt = None
-
-try:
-    import receipt_bridge
-except Exception:
-    receipt_bridge = None
 
 try:
     import startup_manager
@@ -376,19 +372,9 @@ class StartupManagerGUI(ctk.CTk):
         self.withdraw()
         self.resizable(True, True)
         self.configure(fg_color=BG)
-        try:
-            ico = None
-            for name in ('cleanroom-icon.ico', 'icon.ico'):
-                candidate = _resource_path(name)
-                if candidate.exists():
-                    ico = candidate
-                    break
-            if ico is None and brand.ICON_ICO_PATH.exists():
-                ico = brand.ICON_ICO_PATH
-            if ico is not None:
-                self.iconbitmap(default=str(ico))
-        except Exception:
-            pass
+        from ui.window_icon import apply_window_icon, schedule_window_icon
+        apply_window_icon(self)
+        schedule_window_icon(self)
         self._init_style()
 
         self.data = {'folders': [], 'registry': []}
@@ -523,6 +509,8 @@ class StartupManagerGUI(ctk.CTk):
         apply_window_geometry(self, prefs)
         bind_window_tracking(self, on_save=self._save_window_geometry)
         self.deiconify()
+        from ui.window_icon import apply_window_icon
+        apply_window_icon(self)
         self.lift()
         self.focus_force()
         self._update_responsive_layout()
@@ -1011,9 +999,19 @@ class StartupManagerGUI(ctk.CTk):
         except Exception:
             pass
         try:
-            self.destroy()
+            super().destroy()
         except Exception:
             pass
+
+    def destroy(self):
+        """Always remove the tray icon — scripts often call destroy() directly."""
+        if getattr(self, '_shutting_down', False):
+            try:
+                super().destroy()
+            except Exception:
+                pass
+            return
+        self._shutdown_app(reason='destroy')
 
     def _on_window_close(self):
         if getattr(self, '_tray', None) and self._tray.check_health():
@@ -1023,6 +1021,8 @@ class StartupManagerGUI(ctk.CTk):
 
     def _tray_show_window(self):
         self.deiconify()
+        from ui.window_icon import apply_window_icon
+        apply_window_icon(self)
         self.lift()
         try:
             self.focus_force()
@@ -7467,7 +7467,6 @@ class StartupManagerGUI(ctk.CTk):
                 'action': action or 'Receipt',
             }
         if show_receipt:
-            avail = bool(receipt_bridge and receipt_bridge.is_available())
             show_receipt(
                 self, body, receipt_path=path,
                 preview=ctx.get('preview', preview),
@@ -7477,9 +7476,6 @@ class StartupManagerGUI(ctk.CTk):
                 title=ctx.get('title'),
                 bg=BG, card=CARD_BG, text_fg=TEXT, accent=ACCENT,
                 muted=MUTED, border=BORDER, on_accent=ON_ACCENT,
-                receipt_available=avail,
-                open_in_receipt=(receipt_bridge.open_receipt
-                                 if receipt_bridge else None),
             )
         else:
             self._show_text_dialog(ctx.get('title', 'Cleanroom Receipt'), body)
@@ -8086,7 +8082,7 @@ class StartupManagerGUI(ctk.CTk):
                 with PILImage.open(path) as img:
                     img = img.convert('RGBA')
                     img.thumbnail((max_w, max_h), PILImage.LANCZOS)
-                    self._show_preview_photo(PILImageTk.PhotoImage(img, master=self))
+                    self._show_preview_photo(PILImageTk.PhotoImage(img))
                 return
             except Exception:
                 self._set_preview_message('Unable to render image preview.')
@@ -9099,21 +9095,17 @@ def open_receipt_standalone(path_str):
     root.withdraw()
     try:
         if show_receipt:
-            avail = bool(receipt_bridge and receipt_bridge.is_available())
             dlg = show_receipt(root, body, receipt_path=path,
-                               bg=BG, card=CARD_BG, text_fg=TEXT,
-                               receipt_available=avail,
-                               open_in_receipt=(receipt_bridge.open_receipt
-                                                if receipt_bridge else None))
+                               bg=BG, card=CARD_BG, text_fg=TEXT)
 
             def _close():
                 try:
-                    dlg._modal.close()
+                    dlg.destroy()
                 except Exception:
                     pass
                 root.quit()
 
-            dlg._modal.win.protocol('WM_DELETE_WINDOW', _close)
+            dlg.protocol('WM_DELETE_WINDOW', _close)
             root.mainloop()
         else:
             messagebox.showerror('Receipt', 'Receipt viewer unavailable.', parent=root)
@@ -9148,6 +9140,27 @@ if __name__ == '__main__':
         sys.exit(_headless_main(sys.argv[1:]))
     if not _acquire_single_instance():
         sys.exit(0)
+
+    def _signal_shutdown(_signum, _frame):
+        inst = _APP_INSTANCE
+        if inst is not None and not getattr(inst, '_shutting_down', False):
+            try:
+                inst._shutdown_app(reason=f'signal-{_signum}')
+            except Exception:
+                pass
+
+    for sig in (getattr(signal, 'SIGINT', None), getattr(signal, 'SIGTERM', None)):
+        if sig is not None:
+            try:
+                signal.signal(sig, _signal_shutdown)
+            except Exception:
+                pass
+    if sys.platform == 'win32' and hasattr(signal, 'SIGBREAK'):
+        try:
+            signal.signal(signal.SIGBREAK, _signal_shutdown)
+        except Exception:
+            pass
+
     # Rebuild the window when the user flips the theme.
     while True:
         app = StartupManagerGUI(initial_tab=_startup.open_tab)
