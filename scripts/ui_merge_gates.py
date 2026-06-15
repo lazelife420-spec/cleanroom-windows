@@ -266,6 +266,11 @@ def check_layout(app, width: int, height: int, label: str, *, check_settings: bo
     return issues
 
 
+def _disable_tray_init(gui_module):
+    """Layout gates: tray is tested elsewhere; skip init for reliable teardown."""
+    gui_module.StartupManagerGUI._init_tray = lambda self, attempt=0: None
+
+
 def run_scaling_gates(tk_scaling: float = 1.0) -> int:
     from tkinter import messagebox
     import startup_manager_gui as gui_module
@@ -273,6 +278,7 @@ def run_scaling_gates(tk_scaling: float = 1.0) -> int:
     os.environ['CLEANROOM_DISABLE_ANIMATIONS'] = '1'
     for fn in ('showinfo', 'showwarning', 'showerror', 'askyesno'):
         setattr(messagebox, fn, lambda *a, **k: True if fn == 'askyesno' else None)
+    _disable_tray_init(gui_module)
 
     app = gui_module.StartupManagerGUI()
     app.update_idletasks()

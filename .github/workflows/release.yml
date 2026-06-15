@@ -77,6 +77,7 @@ jobs:
 
       - name: Capture launch screenshots
         continue-on-error: true
+        timeout-minutes: 10
         run: python scripts/capture_launch_screenshots.py
 
       - name: Validate release surface and screenshots
