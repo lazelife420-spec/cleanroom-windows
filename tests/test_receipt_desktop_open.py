@@ -6,14 +6,20 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-# Headless CI may lack tk; skip viewer-instantiation tests gracefully.
-_HAS_DISPLAY = True
-try:
-    import customtkinter as ctk  # noqa: F401
-    _root = ctk.CTk()
-    _root.destroy()
-except Exception:
-    _HAS_DISPLAY = False
+# Headless CI may have a broken/partial tk install; probe widget creation.
+def _tk_works() -> bool:
+    try:
+        import customtkinter as ctk
+        root = ctk.CTk()
+        ctk.CTkButton(root, text='probe')  # loads tk button.tcl
+        root.update_idletasks()
+        root.destroy()
+        return True
+    except Exception:
+        return False
+
+
+_HAS_DISPLAY = _tk_works()
 
 _needs_display = pytest.mark.skipif(
     not _HAS_DISPLAY, reason='requires a display (tk available)')
