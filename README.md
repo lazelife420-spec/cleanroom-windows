@@ -12,6 +12,8 @@ It is not a fake "1,247 issues fixed" optimizer. Every cleanup, uninstall leftov
 
 **Clean safely. Prove everything. Undo anytime.**
 
+Cleanroom is built by Proof Foundry — Build it. Prove it. Ship it.
+
 Repository: [`cleanroom-windows`](https://github.com/Z3r0DayZion-install/cleanroom-windows)
 
 **Latest release:** [Cleanroom v1.0.5](https://github.com/Z3r0DayZion-install/cleanroom-windows/releases/tag/v1.0.5) — `Cleanroom-Setup-1.0.5.exe` + `SHA256SUMS.txt` (CI-built, attestable)

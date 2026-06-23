@@ -9,6 +9,7 @@
 - **Context menus** — Right-click actions on Home recommendations, Cleaner candidates, Archive custody, Proof Ledger.
 - **Force Remove guardrails** — Confirmation copy, eligibility checks, proof-log intent (no silent destructive paths).
 - **Cleanroom → RECEIPT bridge** — Optional “Open in RECEIPT” hand-off from receipt viewer (PR #27).
+- **Proof Foundry branding** — Public release surface identifies Cleanroom as built by Proof Foundry.
 
 ## 2026-06-12 — v1.0.4 Windows shell UX (tray + receipt file type)
 
