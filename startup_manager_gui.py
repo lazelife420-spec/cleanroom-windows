@@ -470,6 +470,7 @@ class StartupManagerGUI(ctk.CTk):
             logo_photo=self._launch_logo,
             on_complete=self._finish_launch_sequence,
             min_ms=1100,
+            brand_line=brand.PROOF_FOUNDRY_BYLINE,
         )
 
     def _apply_initial_tab(self):
@@ -4341,7 +4342,8 @@ class StartupManagerGUI(ctk.CTk):
         self.global_status = tk.Label(bar, text='Ready.', bg=STATUS_BG, fg=TEXT,
                                       font=('Segoe UI', 9), anchor='w', padx=8, pady=4)
         self.global_status.pack(side='left', fill='x', expand=True)
-        tk.Label(bar, text=f'{brand.APP_DISPLAY} v{APP_VERSION}', bg=STATUS_BG, fg=MUTED,
+        tk.Label(bar, text=f'{brand.APP_DISPLAY} v{APP_VERSION} · {brand.PROOF_FOUNDRY_BYLINE}',
+                 bg=STATUS_BG, fg=MUTED,
                  font=('Segoe UI', 9), padx=8).pack(side='right')
 
     # ------------------------------------------------------------------
@@ -7637,7 +7639,10 @@ class StartupManagerGUI(ctk.CTk):
         )
         dlg.heading(head_txt, size=17)
         dlg.subheading(brand.APP_MOTTO)
-        dlg.message('Measured by Windows — not estimated. Every item is in the archive.')
+        dlg.message(
+            f'Measured by Windows — not estimated. Every item is in the archive.\n'
+            f'{brand.PROOF_FOUNDRY_BYLINE}'
+        )
         dlg.scroll_text('\n'.join(lines), height=200)
 
         proof_text = '\n'.join(lines)

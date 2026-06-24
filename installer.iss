@@ -3,8 +3,8 @@
 ; Requires dist\Cleanroom\Cleanroom.exe (run build_exe.ps1 first)
 
 #define AppName "Cleanroom"
-#define AppVersion "1.0.5"
-#define AppPublisher "Cleanroom"
+#define AppVersion "1.0.6"
+#define AppPublisher "The Proof Foundry"
 #define AppExeName "Cleanroom.exe"
 
 [Setup]
@@ -12,6 +12,7 @@ AppId={{8B1F1A1E-5C3D-4D2A-9F6B-3A7C42D91E06}
 AppName={#AppName}
 AppVersion={#AppVersion}
 AppPublisher={#AppPublisher}
+AppPublisherURL=https://github.com/Z3r0DayZion-install/cleanroom-windows
 DefaultDirName={autopf}\{#AppName}
 DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
@@ -24,6 +25,10 @@ WizardStyle=modern
 PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
 UninstallDisplayIcon={app}\{#AppExeName}
+VersionInfoCompany={#AppPublisher}
+VersionInfoDescription=Cleanroom - archive-first cleanup with receipts
+VersionInfoProductName={#AppName}
+VersionInfoProductVersion={#AppVersion}
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"

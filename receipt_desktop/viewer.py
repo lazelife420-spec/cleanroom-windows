@@ -7,6 +7,7 @@ from typing import Callable
 
 import customtkinter as ctk
 
+import brand
 from receipt_core.export import build_proof_pack_html
 from receipt_core.parse import parse_file
 from receipt_core.schema import ReceiptType
@@ -32,7 +33,7 @@ _P = {
     'DANGER': '#F87171',
 }
 
-_LOCAL_ONLY = 'Local-only — no account, no cloud, no telemetry.'
+_LOCAL_ONLY = f'Local-only — no account, no cloud, no telemetry. · {brand.PROOF_FOUNDRY_BYLINE}'
 _RECEIPT_ACRONYM = 'R.E.C.E.I.P.T.'
 _RECEIPT_EXPANDED = (
     'Record · Evidence · Custody · Event · Integrity · Proof · Timestamp'
@@ -95,6 +96,10 @@ class ReceiptViewerApp(ctk.CTk):
 
         ctk.CTkLabel(
             left, text=_RECEIPT_EXPANDED,
+            text_color=_P['MUTED'], font=_font(9),
+        ).pack(anchor='w', pady=(2, 0))
+        ctk.CTkLabel(
+            left, text=brand.APP_BRAND_BYLINE,
             text_color=_P['MUTED'], font=_font(9),
         ).pack(anchor='w', pady=(2, 0))
 

@@ -9,6 +9,7 @@ from tkinter import messagebox
 
 import customtkinter as ctk
 
+import brand
 from ui import ctk_theme
 from ui.product_dialogs import CleanroomModal
 from ui.receipt_identity import receipt_context
@@ -130,6 +131,10 @@ class ReceiptViewerDialog:
                 stats, meta['proof'], text_color=muted,
                 font_size=10, wraplength=600, justify='left',
             ).pack(anchor='w', padx=8, pady=(8, 8))
+        ctk_theme.label(
+            stats, brand.PROOF_FOUNDRY_BYLINE, text_color=muted,
+            font_size=9, wraplength=600, justify='left',
+        ).pack(anchor='w', padx=8, pady=(0, 8))
 
         tabs = ctk.CTkTabview(
             self._modal.body, fg_color=card, segmented_button_fg_color=bg,
@@ -182,7 +187,13 @@ class ReceiptViewerDialog:
             lines.append(f"Items: {meta['items']}")
         if meta['bytes']:
             lines.append(f"Total size: {meta['bytes']}")
-        lines.extend(['', meta.get('proof') or '', '', 'See Raw receipt tab for full proof text.'])
+        lines.extend([
+            '',
+            meta.get('proof') or '',
+            '',
+            brand.PROOF_FOUNDRY_BYLINE,
+            'See Raw receipt tab for full proof text.',
+        ])
         return '\n'.join(lines)
 
     def _copy(self):

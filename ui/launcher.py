@@ -23,6 +23,7 @@ def run_launch_splash(
     logo_photo,
     on_complete,
     min_ms: int = 1200,
+    brand_line: str = '',
 ) -> None:
     """Show a centered splash, then call on_complete() after min_ms."""
     if animations_disabled():
@@ -65,6 +66,9 @@ def run_launch_splash(
                  font=ctk.CTkFont('Segoe UI', 22, 'bold')).pack()
     ctk.CTkLabel(frame, text=tagline, text_color=muted,
                  font=ctk.CTkFont('Segoe UI', 11)).pack(pady=(4, 16))
+    if brand_line:
+        ctk.CTkLabel(frame, text=brand_line, text_color=muted,
+                     font=ctk.CTkFont('Segoe UI', 10)).pack(pady=(0, 12))
 
     status_var = ctk.StringVar(value=LAUNCH_STEPS[0])
     ctk.CTkLabel(frame, textvariable=status_var, text_color=accent,

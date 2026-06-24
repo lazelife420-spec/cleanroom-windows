@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""v1.0.5 packaged release dry-run smoke — fresh profile, sandbox demo only.
+"""Packaged release dry-run smoke — fresh profile, sandbox demo only.
 
 Validates the built Cleanroom.exe without destructive actions:
   - launch + clean exit
@@ -106,6 +106,8 @@ def _launch_smoke(exe: Path, env: dict, seconds: float = 8.0) -> None:
 
 
 def _headless_archive(exe: Path, env: dict, cfg: Path, log_path: Path) -> Path | None:
+    import brand
+
     env = dict(env)
     env['PATH'] = os.environ.get('SystemRoot', r'C:\Windows') + r'\System32'
     proc = subprocess.run(
@@ -134,7 +136,11 @@ def _headless_archive(exe: Path, env: dict, cfg: Path, log_path: Path) -> Path |
     if not receipt_files:
         _fail('No receipt generated under Cleanroom/receipts')
     _ok('Cleanroom Receipt generated')
-    return receipt_files[-1]
+    receipt = receipt_files[-1]
+    if brand.PROOF_FOUNDRY_BYLINE not in receipt.read_text(encoding='utf-8'):
+        _fail('Receipt missing Proof Foundry product attribution')
+    _ok('Cleanroom Receipt includes Proof Foundry branding')
+    return receipt
 
 
 def _open_receipt_smoke(exe: Path, env: dict, receipt: Path) -> None:
@@ -172,6 +178,7 @@ def _process_cleanup_check() -> None:
 
 def main() -> int:
     import argparse
+    import brand
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--exe', type=Path, default=DEFAULT_EXE)
@@ -185,7 +192,8 @@ def main() -> int:
         _fail('customtkinter _internal missing in packaged build')
 
     _kill_cleanroom_processes()
-    profile = Path(tempfile.mkdtemp(prefix='cleanroom-v105-smoke-'))
+    version_slug = brand.APP_VERSION.replace('.', '-')
+    profile = Path(tempfile.mkdtemp(prefix=f'cleanroom-v{version_slug}-smoke-'))
     local = profile / 'LocalAppData'
     local.mkdir()
     env = os.environ.copy()
@@ -203,7 +211,7 @@ def main() -> int:
     finally:
         _kill_cleanroom_processes()
 
-    print('\nPackaged v1.0.5 smoke PASSED')
+    print(f'\nPackaged v{brand.APP_VERSION} smoke PASSED')
     print('NOTE: Full GUI flows (scan UI, preview modal, archive table, tray)')
     print('      are validated by source gate scripts on the same commit.')
     return 0
