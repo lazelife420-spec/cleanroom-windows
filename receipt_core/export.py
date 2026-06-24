@@ -4,6 +4,7 @@ from __future__ import annotations
 import html
 from datetime import datetime
 
+import brand
 from receipt_core.schema import Receipt
 from receipt_core.validate import CustodyStatus, ValidationResult
 
@@ -124,6 +125,7 @@ def build_proof_pack_html(
 
   <p class="local-only">
     RECEIPT Proof Pack &mdash; local-only. No account, no cloud, no telemetry.<br>
+    {html.escape(brand.PROOF_FOUNDRY_BYLINE)} &middot; {html.escape(brand.PROOF_FOUNDRY_TAGLINE)}<br>
     This file was generated on your machine and never left it.
   </p>
 

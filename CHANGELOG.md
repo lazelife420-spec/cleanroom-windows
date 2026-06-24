@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-06-23 — v1.0.6 Proof Foundry branding patch
+
+- **The Proof Foundry™ branding** — README, release notes, app footer, first-run splash, receipt surfaces, and installer metadata identify Cleanroom as a Proof Foundry product.
+- **Receipt attribution** — Cleanup, prune, migration, in-app receipt viewer, standalone RECEIPT viewer, and Proof Pack exports include `Product by The Proof Foundry™`.
+- **No cleanup behavior changes** — v1.0.6 is a branding patch on top of the shipped v1.0.5 cleanup/proof behavior.
+
 ## 2026-06-15 — v1.0.5 proof dashboard consolidation
 
 - **Proof dashboard** — Home, Cleaner, Archive, and Proof Ledger hierarchy polish; scan lifecycle UX hardening.

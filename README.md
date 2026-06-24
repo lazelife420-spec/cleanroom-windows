@@ -6,23 +6,38 @@
 
 **Cleanroom is a local-only Windows cleanup utility that archives first, proves every action, and lets you restore before anything is permanently pruned.**
 
+**Product by The Proof Foundry™.** Build it. Prove it. Ship it.
+
 It is not a fake "1,247 issues fixed" optimizer. Every cleanup, uninstall leftover, registry export, and prune is logged, receipted, and reversible from the Restore tab or Cleanroom Rewind.
 
 > **Cleanroom is the anti-CCleaner: archive-first cleanup with receipts, custody checks, and rollback — no cloud, no account, no telemetry.**
 
 **Clean safely. Prove everything. Undo anytime.**
 
-Cleanroom is built by Proof Foundry — Build it. Prove it. Ship it.
+Cleanroom is a Proof Foundry product.
 
 Repository: [`cleanroom-windows`](https://github.com/Z3r0DayZion-install/cleanroom-windows)
 
-**Latest release:** [Cleanroom v1.0.5](https://github.com/Z3r0DayZion-install/cleanroom-windows/releases/tag/v1.0.5) — `Cleanroom-Setup-1.0.5.exe` + `SHA256SUMS.txt` (CI-built, attestable)
+**Latest release:** [Cleanroom v1.0.6](https://github.com/Z3r0DayZion-install/cleanroom-windows/releases/tag/v1.0.6) — `Cleanroom-Setup-1.0.6.exe` + `SHA256SUMS.txt` (CI-built, attestable)
 
-![Cleanroom Review](https://github.com/Z3r0DayZion-install/cleanroom-windows/releases/download/v1.0.5/cleanroom-review.png)
+![Cleanroom Review](https://github.com/Z3r0DayZion-install/cleanroom-windows/releases/download/v1.0.6/cleanroom-review.png)
 
-![Cleanroom Activity Ledger](https://github.com/Z3r0DayZion-install/cleanroom-windows/releases/download/v1.0.5/cleanroom-activity-ledger.png)
+![Cleanroom Activity Ledger](https://github.com/Z3r0DayZion-install/cleanroom-windows/releases/download/v1.0.6/cleanroom-activity-ledger.png)
 
-![Cleanroom Proof Pack Demo](https://github.com/Z3r0DayZion-install/cleanroom-windows/releases/download/v1.0.5/cleanroom-proof-pack-demo.png)
+![Cleanroom Proof Pack Demo](https://github.com/Z3r0DayZion-install/cleanroom-windows/releases/download/v1.0.6/cleanroom-proof-pack-demo.png)
+
+---
+
+## What's new in v1.0.6
+
+| Area | What you get |
+|------|----------------|
+| **Public surface** | README and release notes identify Cleanroom as a Proof Foundry product |
+| **App surface** | First-run splash and app footer show `Product by The Proof Foundry™` |
+| **Receipts** | Generated receipts and receipt viewers carry Proof Foundry product attribution |
+| **Installer metadata** | Publisher/version metadata updated for the v1.0.6 branding patch |
+
+Full release notes: [`docs/RELEASE-v1.0.6.md`](docs/RELEASE-v1.0.6.md)
 
 ---
 
@@ -98,7 +113,7 @@ python -m pip install -r requirements.txt
 python startup_manager_gui.py
 ```
 
-Or install the latest release: [v1.0.5](https://github.com/Z3r0DayZion-install/cleanroom-windows/releases/tag/v1.0.5).
+Or install the latest release: [v1.0.6](https://github.com/Z3r0DayZion-install/cleanroom-windows/releases/tag/v1.0.6).
 
 ### Tests
 
@@ -112,15 +127,15 @@ python -m pytest -p no:xonsh tests/
 powershell -ExecutionPolicy Bypass -File build_exe.ps1
 powershell -ExecutionPolicy Bypass -File build_installer.ps1
 # -> dist\Cleanroom\Cleanroom.exe
-# -> dist\Cleanroom-Setup-1.0.5.exe
+# -> dist\Cleanroom-Setup-1.0.6.exe
 ```
 
 ### Verify provenance
 
-Release artifacts are built by GitHub Actions and include artifact attestations. After downloading `Cleanroom-Setup-1.0.5.exe` from [Releases](https://github.com/Z3r0DayZion-install/cleanroom-windows/releases):
+Release artifacts are built by GitHub Actions and include artifact attestations. After downloading `Cleanroom-Setup-1.0.6.exe` from [Releases](https://github.com/Z3r0DayZion-install/cleanroom-windows/releases):
 
 ```powershell
-gh attestation verify .\Cleanroom-Setup-1.0.5.exe --repo Z3r0DayZion-install/cleanroom-windows
+gh attestation verify .\Cleanroom-Setup-1.0.6.exe --repo Z3r0DayZion-install/cleanroom-windows
 ```
 
 Compare the SHA256 hash against `SHA256SUMS.txt` attached to the same release.

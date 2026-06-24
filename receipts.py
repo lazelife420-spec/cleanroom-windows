@@ -36,6 +36,7 @@ def format_receipt(moved_entries, days_bought=None, now=None, proof=None, motto=
         now=now,
         proof=proof,
         motto=motto or brand.APP_MOTTO,
+        product_line=brand.PROOF_FOUNDRY_BYLINE,
     )
 
 
@@ -76,6 +77,7 @@ def format_prune_receipt(pruned_entries, bytes_pruned=None, now=None):
         bytes_pruned=bytes_pruned,
         now=now,
         motto=brand.APP_MOTTO,
+        product_line=brand.PROOF_FOUNDRY_BYLINE,
     )
 
 
