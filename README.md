@@ -12,11 +12,11 @@ It is not a fake "1,247 issues fixed" optimizer. Every cleanup, uninstall leftov
 
 **Clean safely. Prove everything. Undo anytime.**
 
+Cleanroom is built by Proof Foundry — Build it. Prove it. Ship it.
+
 Repository: [`cleanroom-windows`](https://github.com/Z3r0DayZion-install/cleanroom-windows)
 
-**Latest release:** [Cleanroom v1.0.4](https://github.com/Z3r0DayZion-install/cleanroom-windows/releases/tag/v1.0.4) — `Cleanroom-Setup-1.0.4.exe` + `SHA256SUMS.txt` (CI-built, attestable)
-
-**Next:** v1.0.5 release prep on branch `release/v1.0.5-prep` — proof dashboard consolidation (not tagged yet).
+**Latest release:** [Cleanroom v1.0.5](https://github.com/Z3r0DayZion-install/cleanroom-windows/releases/tag/v1.0.5) — `Cleanroom-Setup-1.0.5.exe` + `SHA256SUMS.txt` (CI-built, attestable)
 
 ![Cleanroom Review](https://github.com/Z3r0DayZion-install/cleanroom-windows/releases/download/v1.0.5/cleanroom-review.png)
 
@@ -26,7 +26,7 @@ Repository: [`cleanroom-windows`](https://github.com/Z3r0DayZion-install/cleanro
 
 ---
 
-## What's new in v1.0.5 (release prep)
+## What's new in v1.0.5
 
 | Area | What you get |
 |------|----------------|
@@ -98,7 +98,7 @@ python -m pip install -r requirements.txt
 python startup_manager_gui.py
 ```
 
-Or install the latest release: [v1.0.4](https://github.com/Z3r0DayZion-install/cleanroom-windows/releases/tag/v1.0.4).
+Or install the latest release: [v1.0.5](https://github.com/Z3r0DayZion-install/cleanroom-windows/releases/tag/v1.0.5).
 
 ### Tests
 
@@ -117,10 +117,10 @@ powershell -ExecutionPolicy Bypass -File build_installer.ps1
 
 ### Verify provenance
 
-Release artifacts are built by GitHub Actions and include artifact attestations. After downloading `Cleanroom-Setup-1.0.4.exe` from [Releases](https://github.com/Z3r0DayZion-install/cleanroom-windows/releases):
+Release artifacts are built by GitHub Actions and include artifact attestations. After downloading `Cleanroom-Setup-1.0.5.exe` from [Releases](https://github.com/Z3r0DayZion-install/cleanroom-windows/releases):
 
 ```powershell
-gh attestation verify .\Cleanroom-Setup-1.0.4.exe --repo Z3r0DayZion-install/cleanroom-windows
+gh attestation verify .\Cleanroom-Setup-1.0.5.exe --repo Z3r0DayZion-install/cleanroom-windows
 ```
 
 Compare the SHA256 hash against `SHA256SUMS.txt` attached to the same release.

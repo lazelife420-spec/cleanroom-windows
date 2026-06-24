@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - 'v*'
+      - '!v*-release.*'
 
 concurrency:
   group: release-${{ github.ref }}
