@@ -3,6 +3,7 @@ __pycache__/
 .pytest_cache/
 build/
 dist/
+release/
 *.spec.bak
 cleanup_log.json
 cleanup_plan.json
