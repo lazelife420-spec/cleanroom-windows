@@ -178,6 +178,7 @@ def _process_cleanup_check() -> None:
 
 def main() -> int:
     import argparse
+
     import brand
 
     parser = argparse.ArgumentParser(description=__doc__)

@@ -2,6 +2,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 
+
 def log_event(cfg, event_name, meta=None):
     try:
         tele = cfg.get('telemetry', {})

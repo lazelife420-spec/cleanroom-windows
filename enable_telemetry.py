@@ -1,11 +1,23 @@
-# telemetry helpers (placeholder)
+#!/usr/bin/env python3
+"""Local telemetry opt-in helpers and config toggle CLI."""
+
+from __future__ import annotations
+
 import json
+import sys
 from datetime import datetime
 from pathlib import Path
 
 TEL_PATH = Path(__file__).parent / 'telemetry.json'
+CFG = Path(__file__).parent / 'cleanup_config.yaml'
 
-def is_opted_in():
+try:
+    import yaml
+except Exception:
+    yaml = None
+
+
+def is_opted_in() -> bool:
     try:
         if not TEL_PATH.exists():
             return False
@@ -15,68 +27,60 @@ def is_opted_in():
     except Exception:
         return False
 
-def set_opt_in(v: bool):
+
+def set_opt_in(value: bool) -> bool:
     try:
-        payload = {'opt_in': bool(v), 'ts': datetime.now().isoformat()}
+        payload = {'opt_in': bool(value), 'ts': datetime.now().isoformat()}
         with open(TEL_PATH, 'w', encoding='utf-8') as f:
             json.dump(payload, f, indent=2)
         return True
     except Exception:
         return False
-#!/usr/bin/env python3
-import sys
-import json
-from pathlib import Path
-
-CFG = Path(__file__).parent / 'cleanup_config.yaml'
-try:
-    import yaml
-except Exception:
-    yaml = None
 
 
-def load_yaml(p):
-    text = p.read_text(encoding='utf-8')
+def load_yaml(path: Path):
+    text = path.read_text(encoding='utf-8')
     if yaml:
         return yaml.safe_load(text)
     import ruamel.yaml as ry
+
     return ry.YAML().load(text)
 
 
-def write_yaml(p, obj):
+def write_yaml(path: Path, obj) -> None:
     if yaml:
-        p.write_text(yaml.safe_dump(obj), encoding='utf-8')
-    else:
-        import ruamel.yaml as ry
-        ry.YAML().dump(obj, p.open('w', encoding='utf-8'))
+        path.write_text(yaml.safe_dump(obj), encoding='utf-8')
+        return
+    import ruamel.yaml as ry
+
+    ry.YAML().dump(obj, path.open('w', encoding='utf-8'))
 
 
-def main(enable=True):
+def main(enable: bool = True) -> int:
     if not CFG.exists():
         print('Config not found:', CFG)
         return 2
-    # simple parsing: treat as YAML-like by using ruamel if PyYAML not available
     try:
         cfg = load_yaml(CFG)
-    except Exception as e:
-        print('Failed to parse config:', e)
+    except Exception as exc:
+        print('Failed to parse config:', exc)
         return 2
     tele = cfg.get('telemetry') or {}
     tele['enabled'] = bool(enable)
     cfg['telemetry'] = tele
     try:
         write_yaml(CFG, cfg)
-    except Exception as e:
-        print('Failed to write config:', e)
+    except Exception as exc:
+        print('Failed to write config:', exc)
         return 2
     print(f"Telemetry {'enabled' if enable else 'disabled'} in {CFG}")
     return 0
 
+
 if __name__ == '__main__':
-    ok = True
+    enabled = True
     if len(sys.argv) > 1:
         arg = sys.argv[1].lower()
-        if arg in ('off','false','0','disable'):
-            ok = False
-    rc = main(enable=ok)
-    sys.exit(rc)
+        if arg in ('off', 'false', '0', 'disable'):
+            enabled = False
+    sys.exit(main(enable=enabled))

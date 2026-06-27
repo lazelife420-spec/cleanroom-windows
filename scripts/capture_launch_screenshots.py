@@ -77,10 +77,11 @@ def _disable_tray_init(gui_module):
 
 def capture_gui_screenshots():
     os.environ['CLEANROOM_DISABLE_ANIMATIONS'] = '1'
-    import receipts as receipts_module
-    import foresight as foresight_module
-    import startup_manager_gui as gui_module
     from tkinter import messagebox
+
+    import foresight as foresight_module
+    import receipts as receipts_module
+    import startup_manager_gui as gui_module
 
     for fn in ('showinfo', 'showwarning', 'showerror', 'askyesno'):
         setattr(messagebox, fn, lambda *a, **k: True if fn == 'askyesno' else None)

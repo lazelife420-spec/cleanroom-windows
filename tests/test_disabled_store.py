@@ -1,6 +1,7 @@
 """Tests for the reversible startup-disable backup store."""
-from pathlib import Path
+# ruff: noqa: E402
 import sys
+from pathlib import Path
 
 import pytest
 

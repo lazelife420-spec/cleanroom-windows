@@ -683,7 +683,7 @@ def settings_section_nav(parent, labels: list[str], *, sidebar_bg: str, accent: 
     buttons = {}
     for label in labels:
         btn = ctk_theme.button(
-            row, label, lambda l=label: on_select(l),
+            row, label, lambda selected_label=label: on_select(selected_label),
             fg_color='transparent', hover_color=accent, text_color=muted, width=88,
         )
         btn.pack(side='left', padx=(0, 6))

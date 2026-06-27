@@ -63,6 +63,7 @@ def tray_smoke_only():
 
 def receipt_gate(profile_local: str, installed_exe: str):
     import os
+
     import receipts
 
     os.environ['LOCALAPPDATA'] = profile_local

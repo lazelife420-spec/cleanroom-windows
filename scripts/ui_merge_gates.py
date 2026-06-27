@@ -273,6 +273,7 @@ def _disable_tray_init(gui_module):
 
 def run_scaling_gates(tk_scaling: float = 1.0) -> int:
     from tkinter import messagebox
+
     import startup_manager_gui as gui_module
 
     os.environ['CLEANROOM_DISABLE_ANIMATIONS'] = '1'

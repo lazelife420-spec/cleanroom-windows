@@ -7,7 +7,6 @@ Prune affects archived copies only — never original live paths.
 from __future__ import annotations
 
 import json
-import os
 import shutil
 from datetime import datetime, timedelta
 from pathlib import Path

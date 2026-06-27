@@ -1,6 +1,5 @@
-from pathlib import Path
 import sys
-import json
+from pathlib import Path
 
 
 def _import_admin():

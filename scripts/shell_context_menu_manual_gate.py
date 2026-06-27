@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# ruff: noqa: E402
 """Manual gate: in-app + Explorer context menus (HKCU shell keys, custody-only delete).
 
 Run from repo root:
@@ -10,7 +11,6 @@ Exit 0 only if all hard gates pass.
 from __future__ import annotations
 
 import json
-import os
 import sys
 import tempfile
 from pathlib import Path
@@ -18,7 +18,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-import archive_custody as ac
 import shell_actions as sa
 import shell_context_menu as scm
 

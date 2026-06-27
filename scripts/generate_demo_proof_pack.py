@@ -3,9 +3,9 @@
 
 Uses synthetic data with 100% custody verification — not a gaps-detected example.
 """
+import sys
 from collections import Counter
 from pathlib import Path
-import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))

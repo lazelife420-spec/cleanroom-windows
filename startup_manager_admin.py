@@ -3,12 +3,10 @@
 
 This module requires administrator privileges for registry writes.
 """
-import os
-import sys
 import ctypes
 import json
+import sys
 from datetime import datetime
-from pathlib import Path
 
 # Backup store for disabled startup entries: disabling is reversible, in line
 # with the app's archive-first philosophy. Per-user and writable without admin.

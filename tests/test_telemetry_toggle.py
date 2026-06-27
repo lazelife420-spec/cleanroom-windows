@@ -1,5 +1,6 @@
-from pathlib import Path
 import sys
+from pathlib import Path
+
 import yaml
 
 
@@ -35,7 +36,7 @@ def test_disable_telemetry(tmp_path, monkeypatch):
     assert data.get('telemetry', {}).get('enabled') is False
     
 def test_toggle(tmp_path):
-    from enable_telemetry import set_opt_in, is_opted_in
+    from enable_telemetry import is_opted_in, set_opt_in
     p = tmp_path / 'telemetry.json'
     # point to local telemetry path for test
     import enable_telemetry as et

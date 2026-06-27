@@ -107,11 +107,11 @@ class TestParseThenDisplay:
     """Integration: parse a receipt and check ViewerState derivation."""
 
     def test_cleanup_receipt_populates_state(self):
+        from brand import APP_MOTTO
+        from receipt_core import render
         from receipt_core.parse import parse_text
         from receipt_core.validate import validate
         from receipt_desktop.state import ViewerState
-        from receipt_core import render
-        from brand import APP_MOTTO
 
         text = render.format_receipt(
             [{'src': 'C:\\a.txt', 'dest': 'C:\\a2.txt',
@@ -129,11 +129,11 @@ class TestParseThenDisplay:
                                      'partial_receipt', 'unknown')
 
     def test_prune_receipt_populates_state(self):
+        from brand import APP_MOTTO
+        from receipt_core import render
         from receipt_core.parse import parse_text
         from receipt_core.validate import validate
         from receipt_desktop.state import ViewerState
-        from receipt_core import render
-        from brand import APP_MOTTO
 
         text = render.format_prune_receipt(
             [{'dest': r'C:\arch\x.zip', 'size': 1024}],
@@ -166,8 +166,8 @@ class TestCustodySummary:
     """Tests for the _build_custody_summary_text output."""
 
     def _app_with_cleanup(self, tmp_path, monkeypatch):
-        from receipt_core import render
         from brand import APP_MOTTO
+        from receipt_core import render
 
         f = tmp_path / 'receipt.cleanroom-receipt'
         f.write_text(
@@ -182,8 +182,8 @@ class TestCustodySummary:
         return _make_viewer_app(monkeypatch, receipt_path=f)
 
     def _app_with_prune(self, tmp_path, monkeypatch):
-        from receipt_core import render
         from brand import APP_MOTTO
+        from receipt_core import render
 
         f = tmp_path / 'prune_receipt.cleanroom-receipt'
         f.write_text(
@@ -242,8 +242,8 @@ class TestViewerNoTk:
         _safe_destroy(app)
 
     def test_viewer_load_receipt_updates_title_and_status(self, tmp_path, monkeypatch):
-        from receipt_core import render
         from brand import APP_MOTTO
+        from receipt_core import render
 
         receipt_file = tmp_path / 'receipt_20260101_120000.cleanroom-receipt'
         text = render.format_receipt(
@@ -266,8 +266,8 @@ class TestViewerNoTk:
         _safe_destroy(app)
 
     def test_viewer_parse_legacy_txt(self, tmp_path, monkeypatch):
-        from receipt_core import render
         from brand import APP_MOTTO
+        from receipt_core import render
 
         legacy = tmp_path / 'receipt_20260101_120000.txt'
         legacy.write_text(

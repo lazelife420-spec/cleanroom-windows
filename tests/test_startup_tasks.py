@@ -1,6 +1,7 @@
 """Tests for the scheduled-task (logon trigger) startup source."""
-from pathlib import Path
+# ruff: noqa: E402
 import sys
+from pathlib import Path
 
 tests_dir = Path(__file__).resolve().parent
 project_dir = tests_dir.parent

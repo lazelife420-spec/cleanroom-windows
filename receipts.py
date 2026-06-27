@@ -11,14 +11,12 @@ from pathlib import Path
 
 import brand
 from receipt_core import paths, render
-from receipt_core.paths import (
-    LEGACY_RECEIPT_EXT,
-    RECEIPT_EXT,
-    RECEIPT_EXTENSIONS,
-)
 
 RECEIPT_DIR = brand.user_data_dir() / 'receipts'
 MAX_RECEIPTS = 100
+LEGACY_RECEIPT_EXT = paths.LEGACY_RECEIPT_EXT
+RECEIPT_EXT = paths.RECEIPT_EXT
+RECEIPT_EXTENSIONS = paths.RECEIPT_EXTENSIONS
 
 
 def list_receipt_files(receipt_dir=None, prefix='receipt'):

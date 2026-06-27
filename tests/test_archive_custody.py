@@ -1,7 +1,7 @@
 """Tests for archive_custody.py — browser records and safe archive-only prune."""
 import json
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))

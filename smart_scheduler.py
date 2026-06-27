@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
 """Smart scheduling system with adaptive timing and automation."""
 import json
+import logging
 import os
-import time
-import schedule
+import platform
+import subprocess
 import threading
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Dict
-import logging
-import subprocess
-import platform
+
+import schedule
 
 logger = logging.getLogger(__name__)
 

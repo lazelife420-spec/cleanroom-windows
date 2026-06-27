@@ -7,8 +7,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from receipt_core.export import build_proof_pack_html
 from receipt_core.schema import (
     Artifact,
-    CustodySummary,
-    ProofRecord,
     Receipt,
     ReceiptType,
 )

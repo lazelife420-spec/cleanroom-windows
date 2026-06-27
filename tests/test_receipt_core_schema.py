@@ -8,13 +8,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from receipt_core.schema import (
+    RECEIPT_SCHEMA_VERSION,
     Artifact,
     CustodySummary,
     HashStatus,
     ProofRecord,
     Receipt,
     ReceiptType,
-    RECEIPT_SCHEMA_VERSION,
 )
 
 

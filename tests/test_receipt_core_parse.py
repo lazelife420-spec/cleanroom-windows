@@ -7,11 +7,9 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import brand
-import receipts
 from receipt_core import custody, render
 from receipt_core.parse import parse_file, parse_text
 from receipt_core.schema import (
-    Receipt,
     ReceiptType,
 )
 

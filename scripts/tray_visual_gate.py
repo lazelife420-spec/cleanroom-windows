@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# ruff: noqa: E402
 """Tray visual gate — real GUI session with pystray icon lifecycle checks.
 
 Automated checks cover menu build, hide/show, quit cleanup, and singleton behavior.
