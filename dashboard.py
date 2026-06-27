@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 """Web dashboard for monitoring and managing smart cleanup operations."""
 import json
-import os
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Dict, List, Any
+from typing import Dict, List
 import logging
 
 try:
-    from flask import Flask, render_template, jsonify, request
+    from flask import Flask, jsonify, request
     from flask_socketio import SocketIO, emit
     FLASK_AVAILABLE = True
 except ImportError:
@@ -19,53 +18,53 @@ logger = logging.getLogger(__name__)
 
 class Dashboard:
     """Web dashboard for real-time monitoring and control."""
-    
+
     def __init__(self, port: int = 8080, host: str = 'localhost'):
         self.port = port
         self.host = host
         self.app = None
         self.socketio = None
         self.running = False
-        
+
         if not FLASK_AVAILABLE:
             logger.error("Flask not available - install with: pip install flask flask-socketio")
             return
-        
+
         self._setup_app()
-    
+
     def _setup_app(self):
         """Setup Flask application and routes."""
         self.app = Flask(__name__)
         self.app.config['SECRET_KEY'] = 'smart-cleaner-dashboard'
         self.socketio = SocketIO(self.app, cors_allowed_origins="*")
-        
+
         @self.app.route('/')
         def index():
             return self._get_dashboard_html()
-        
+
         @self.app.route('/api/status')
         def get_status():
             return jsonify(self._get_system_status())
-        
+
         @self.app.route('/api/history')
         def get_history():
             days = request.args.get('days', 7, type=int)
             return jsonify(self._get_cleanup_history(days))
-        
+
         @self.app.route('/api/archive')
         def get_archive_info():
             return jsonify(self._get_archive_info())
-        
+
         @self.app.route('/api/stats')
         def get_stats():
             return jsonify(self._get_statistics())
-        
+
         @self.app.route('/api/run', methods=['POST'])
         def run_cleanup():
             data = request.get_json()
             profile = data.get('profile', 'conservative')
             dry_run = data.get('dry_run', True)
-            
+
             try:
                 # Execute cleanup
                 import subprocess
@@ -75,9 +74,9 @@ class Dashboard:
                     pass
                 else:
                     cmd.append('--apply')
-                
+
                 result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
-                
+
                 return jsonify({
                     'success': result.returncode == 0,
                     'output': result.stdout,
@@ -88,16 +87,16 @@ class Dashboard:
                     'success': False,
                     'error': str(e)
                 })
-        
+
         @self.app.route('/api/archive/delete', methods=['POST'])
         def delete_archive_files():
             data = request.get_json()
             files = data.get('files', [])
-            
+
             try:
                 import archive_manager
                 log_file = 'cleanup_log.json'
-                
+
                 # Convert files to archive_custody format
                 records = []
                 for file_path in files:
@@ -108,9 +107,9 @@ class Dashboard:
                         'size': 0,
                         'when': datetime.now().isoformat()
                     })
-                
+
                 result = archive_manager.apply_prune(records, log_file, dry_run=False)
-                
+
                 return jsonify({
                     'success': True,
                     'deleted_count': len(result['pruned']),
@@ -121,16 +120,16 @@ class Dashboard:
                     'success': False,
                     'error': str(e)
                 })
-        
+
         # WebSocket events
         @self.socketio.on('connect')
         def handle_connect():
             emit('status_update', self._get_system_status())
-        
+
         @self.socketio.on('request_status')
         def handle_status_request():
             emit('status_update', self._get_system_status())
-    
+
     def _get_dashboard_html(self) -> str:
         """Generate dashboard HTML."""
         return '''
@@ -171,7 +170,7 @@ class Dashboard:
         <h1>🧹 Smart Cleaner Dashboard</h1>
         <p>Real-time monitoring and control</p>
     </div>
-    
+
     <div class="container">
         <div class="grid">
             <!-- System Status -->
@@ -197,7 +196,7 @@ class Dashboard:
                     <div id="disk-progress" class="progress-bar" style="width: 0%"></div>
                 </div>
             </div>
-            
+
             <!-- Quick Actions -->
             <div class="card">
                 <h3>⚡ Quick Actions</h3>
@@ -207,7 +206,7 @@ class Dashboard:
                 <button class="btn" onclick="refreshData()">🔄 Refresh</button>
                 <div id="action-status" class="log" style="margin-top: 1rem;"></div>
             </div>
-            
+
             <!-- Archive Management -->
             <div class="card">
                 <h3>📦 Archive Management</h3>
@@ -223,20 +222,20 @@ class Dashboard:
                 <button class="btn danger" onclick="deleteSelectedFiles()">🗑️ Delete Selected</button>
                 <div id="archive-files" class="file-list" style="margin-top: 1rem;"></div>
             </div>
-            
+
             <!-- Cleanup History -->
             <div class="card">
                 <h3>📈 Cleanup History</h3>
                 <canvas id="history-chart" width="400" height="200"></canvas>
                 <div id="history-stats" style="margin-top: 1rem;"></div>
             </div>
-            
+
             <!-- Recent Activity -->
             <div class="card">
                 <h3>🕐 Recent Activity</h3>
                 <div id="activity-log" class="log"></div>
             </div>
-            
+
             <!-- System Health -->
             <div class="card">
                 <h3>🏥 System Health</h3>
@@ -255,21 +254,21 @@ class Dashboard:
             </div>
         </div>
     </div>
-    
+
     <script>
         const socket = io();
         let selectedFiles = [];
-        
+
         // Socket events
         socket.on('connect', () => {
             console.log('Connected to dashboard');
             refreshData();
         });
-        
+
         socket.on('status_update', (data) => {
             updateStatus(data);
         });
-        
+
         // Update functions
         function updateStatus(data) {
             document.getElementById('system-status').textContent = data.status || 'Idle';
@@ -277,28 +276,28 @@ class Dashboard:
             document.getElementById('disk-usage').textContent = data.disk_usage || '--';
             document.getElementById('files-cleaned').textContent = data.files_cleaned || '--';
             document.getElementById('space-freed').textContent = data.space_freed || '--';
-            
+
             if (data.disk_percent) {
                 document.getElementById('disk-progress').style.width = data.disk_percent + '%';
             }
-            
+
             if (data.system_health) {
                 document.getElementById('cpu-usage').textContent = data.system_health.cpu + '%';
                 document.getElementById('memory-usage').textContent = data.system_health.memory + '%';
             }
         }
-        
+
         function refreshData() {
             fetch('/api/status').then(r => r.json()).then(updateStatus);
             loadArchiveInfo();
             loadHistory();
             loadActivity();
         }
-        
+
         function runCleanup(profile, dryRun) {
             const statusDiv = document.getElementById('action-status');
             statusDiv.textContent = dryRun ? '🔍 Scanning...' : '🧹 Cleaning...';
-            
+
             fetch('/api/run', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
@@ -317,19 +316,19 @@ class Dashboard:
                 statusDiv.textContent = '❌ Error: ' + err.message;
             });
         }
-        
+
         function loadArchiveInfo() {
             fetch('/api/archive').then(r => r.json()).then(data => {
                 document.getElementById('archive-size').textContent = formatBytes(data.total_size || 0);
                 document.getElementById('archive-count').textContent = data.file_count || 0;
             });
         }
-        
+
         function loadArchiveFiles() {
             fetch('/api/archive').then(r => r.json()).then(data => {
                 const filesDiv = document.getElementById('archive-files');
                 filesDiv.innerHTML = '';
-                
+
                 if (data.files && data.files.length > 0) {
                     data.files.slice(0, 20).forEach(file => {
                         const fileDiv = document.createElement('div');
@@ -351,7 +350,7 @@ class Dashboard:
                 }
             });
         }
-        
+
         function toggleFile(filePath, checked) {
             if (checked) {
                 selectedFiles.push(filePath);
@@ -359,17 +358,17 @@ class Dashboard:
                 selectedFiles = selectedFiles.filter(f => f !== filePath);
             }
         }
-        
+
         function deleteSelectedFiles() {
             if (selectedFiles.length === 0) {
                 alert('No files selected');
                 return;
             }
-            
+
             if (!confirm(`Delete ${selectedFiles.length} selected files? This cannot be undone.`)) {
                 return;
             }
-            
+
             fetch('/api/archive/delete', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
@@ -387,21 +386,21 @@ class Dashboard:
                 }
             });
         }
-        
+
         function loadHistory() {
             fetch('/api/history?days=7').then(r => r.json()).then(data => {
                 updateHistoryChart(data);
                 updateHistoryStats(data);
             });
         }
-        
+
         function updateHistoryChart(data) {
             const ctx = document.getElementById('history-chart').getContext('2d');
-            
+
             const labels = data.map(d => new Date(d.date).toLocaleDateString());
             const filesData = data.map(d => d.files_cleaned);
             const spaceData = data.map(d => d.space_freed / (1024*1024)); // Convert to MB
-            
+
             new Chart(ctx, {
                 type: 'line',
                 data: {
@@ -440,11 +439,11 @@ class Dashboard:
                 }
             });
         }
-        
+
         function updateHistoryStats(data) {
             const totalFiles = data.reduce((sum, d) => sum + d.files_cleaned, 0);
             const totalSpace = data.reduce((sum, d) => sum + d.space_freed, 0);
-            
+
             document.getElementById('history-stats').innerHTML = `
                 <div class="metric">
                     <span>7-day Total:</span>
@@ -452,7 +451,7 @@ class Dashboard:
                 </div>
             `;
         }
-        
+
         function loadActivity() {
             // Simulate activity log
             const activities = [
@@ -461,13 +460,13 @@ class Dashboard:
                 'Archive cleanup performed',
                 'User logged in'
             ];
-            
+
             const logDiv = document.getElementById('activity-log');
-            logDiv.innerHTML = activities.map(activity => 
+            logDiv.innerHTML = activities.map(activity =>
                 `<div>${new Date().toLocaleTimeString()} - ${activity}</div>`
             ).join('');
         }
-        
+
         function formatBytes(bytes) {
             if (bytes === 0) return '0 B';
             const k = 1024;
@@ -475,29 +474,29 @@ class Dashboard:
             const i = Math.floor(Math.log(bytes) / Math.log(k));
             return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
         }
-        
+
         // Auto-refresh every 30 seconds
         setInterval(refreshData, 30000);
-        
+
         // Initial load
         refreshData();
     </script>
 </body>
 </html>
         '''
-    
+
     def _get_system_status(self) -> Dict:
         """Get current system status."""
         try:
             import psutil
-            
+
             # Get disk usage
             disk_usage = psutil.disk_usage(Path.home().anchor)
             disk_percent = (disk_usage.used / disk_usage.total) * 100
-            
+
             # Get cleanup statistics
             stats = self._get_statistics()
-            
+
             return {
                 'status': 'running' if self.running else 'idle',
                 'disk_usage': f"{disk_percent:.1f}%",
@@ -518,16 +517,16 @@ class Dashboard:
                 'space_freed': '0 B',
                 'timestamp': datetime.now().isoformat()
             }
-    
+
     def _get_cleanup_history(self, days: int = 7) -> List[Dict]:
         """Get cleanup history for the last N days."""
         history = []
         cutoff_date = datetime.now() - timedelta(days=days)
-        
+
         try:
             with open('cleanup_log.json', 'r') as f:
                 log_data = json.load(f)
-                
+
             # Group by date
             daily_stats = {}
             for entry in log_data:
@@ -541,7 +540,7 @@ class Dashboard:
                             daily_stats[date]['space_freed'] += entry.get('size', 0)
                     except (ValueError, KeyError):
                         continue
-            
+
             # Convert to list
             for date, stats in sorted(daily_stats.items()):
                 history.append({
@@ -549,23 +548,23 @@ class Dashboard:
                     'files_cleaned': stats['files_cleaned'],
                     'space_freed': stats['space_freed']
                 })
-                
+
         except Exception:
             pass
-        
+
         return history
-    
+
     def _get_archive_info(self) -> Dict:
         """Get archive information."""
         try:
             import archive_manager
-            
+
             archive_dir = 'cleanup_archive'
             summary = archive_manager.get_archive_summary(archive_dir)
-            
+
             # Get file details
             files = archive_manager.browse_archive(archive_dir, limit=50)
-            
+
             return {
                 'total_size': summary.get('archive_size_mb', 0) * 1024 * 1024,  # Convert to bytes
                 'file_count': summary.get('file_count', 0),
@@ -579,7 +578,7 @@ class Dashboard:
         except Exception as e:
             logger.error(f"Error getting archive info: {e}")
             return {'total_size': 0, 'file_count': 0, 'files': []}
-    
+
     def _get_statistics(self) -> Dict:
         """Get overall statistics."""
         stats = {
@@ -588,25 +587,25 @@ class Dashboard:
             'last_cleanup': None,
             'cleanup_count': 0
         }
-        
+
         try:
             with open('cleanup_log.json', 'r') as f:
                 log_data = json.load(f)
-                
+
             for entry in log_data:
                 if isinstance(entry, dict) and entry.get('action') != 'prune':
                     stats['total_files_cleaned'] += 1
                     stats['total_space_freed'] += entry.get('size', 0)
                     stats['cleanup_count'] += 1
-                    
+
                     if not stats['last_cleanup'] or entry.get('when', '') > stats['last_cleanup']:
                         stats['last_cleanup'] = entry.get('when')
-                        
+
         except Exception:
             pass
-        
+
         return stats
-    
+
     def _format_bytes(self, bytes: int) -> str:
         """Format bytes to human readable string."""
         for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
@@ -614,17 +613,17 @@ class Dashboard:
                 return f"{bytes:.1f} {unit}"
             bytes /= 1024
         return f"{bytes:.1f} PB"
-    
+
     def start(self):
         """Start the dashboard server."""
         if not FLASK_AVAILABLE:
             logger.error("Cannot start dashboard - Flask not available")
             return False
-        
+
         if self.running:
             logger.warning("Dashboard already running")
             return True
-        
+
         try:
             self.running = True
             self.socketio.run(self.app, host=self.host, port=self.port, debug=False)
@@ -633,7 +632,7 @@ class Dashboard:
             logger.error(f"Failed to start dashboard: {e}")
             self.running = False
             return False
-    
+
     def stop(self):
         """Stop the dashboard server."""
         self.running = False
@@ -644,14 +643,14 @@ class Dashboard:
 def main():
     """CLI for dashboard management."""
     import argparse
-    
+
     parser = argparse.ArgumentParser(description='Smart cleaner dashboard')
     parser.add_argument('--start', action='store_true', help='Start dashboard')
     parser.add_argument('--port', type=int, default=8080, help='Port to run on')
     parser.add_argument('--host', default='localhost', help='Host to bind to')
-    
+
     args = parser.parse_args()
-    
+
     if args.start:
         dashboard = Dashboard(args.port, args.host)
         print(f"🚀 Starting dashboard on http://{args.host}:{args.port}")
