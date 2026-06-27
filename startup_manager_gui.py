@@ -16,7 +16,6 @@ from ui.page_layout import (
 )
 from ui.window_geometry import (
     apply_window_geometry, bind_window_tracking, animations_disabled,
-    MAX_SIZE, MIN_SIZE, apply_dialog_geometry,
 )
 from ui.receipt_animation import (
     DEFAULT_LINES,
@@ -39,22 +38,17 @@ from ui.proof_dashboard import (
     CommandBar,
     ProofSummaryCard,
     app_shell_header,
-    brand_identity_block,
     collapsible_section,
     recent_proof_tile,
     recommendation_card,
     settings_card,
     settings_pill_nav,
-    settings_sidebar_nav,
     sidebar_nav_button,
-    trust_compact_strip,
 )
 from ui.product_dialogs import (
     CleanroomModal,
     show_action_popover,
-    show_grouped_popover,
     show_report_modal,
-    show_summary_modal,
 )
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
@@ -2618,7 +2612,6 @@ class StartupManagerGUI(ctk.CTk):
     def _refresh_header_proof_badges(self):
         """Update proof-first header badges from current log/custody/receipt state."""
         entries = self._load_log_dicts()
-        measured = len(entries)
         custody = {'verified': 0, 'total': 0, 'missing': 0, 'bytes_in_custody': 0}
         if proof_module and entries:
             try:
@@ -2659,11 +2652,27 @@ class StartupManagerGUI(ctk.CTk):
                     var.trace_add('write', self._mark_settings_dirty)
                 except Exception:
                     pass
-        for var_name in ('set_archive_var', 'set_ext_var', 'set_theme_var', 'set_default_tab_var'):
+        def _perf_trace(*_args):
+            self._mark_settings_dirty()
+            if hasattr(self, '_update_perf_status'):
+                self._update_perf_status()
+
+        for var_name in (
+            'set_archive_var', 'set_ext_var', 'set_theme_var', 'set_default_tab_var',
+        ):
             var = getattr(self, var_name, None)
             if var is not None:
                 try:
                     var.trace_add('write', self._mark_settings_dirty)
+                except Exception:
+                    pass
+        for var_name in (
+            'set_performance_scan', 'set_performance_workers', 'set_performance_memory', 'set_performance_incremental',
+        ):
+            var = getattr(self, var_name, None)
+            if var is not None:
+                try:
+                    var.trace_add('write', _perf_trace)
                 except Exception:
                     pass
         for widget in (getattr(self, 'set_exclude_text', None),
@@ -4044,6 +4053,10 @@ class StartupManagerGUI(ctk.CTk):
                    command=self.export_audit).pack(side='left', padx=(8, 0))
 
         self.set_power_var = tk.BooleanVar(value=bool(load_ui_prefs().get('power_user')))
+        self.set_performance_scan = tk.BooleanVar(value=False)
+        self.set_performance_workers = tk.IntVar(value=0)
+        self.set_performance_memory = tk.IntVar(value=512)
+        self.set_performance_incremental = tk.BooleanVar(value=True)
         power_body = settings_card(
             self._settings_section_frames['Advanced'], 'Power user', card_bg=CARD_BG, accent=ACCENT)
         ctk_theme.label(
@@ -4080,6 +4093,74 @@ class StartupManagerGUI(ctk.CTk):
                                           bg=PREVIEW_BG, fg=TEXT, insertbackground=TEXT,
                                           highlightthickness=0)
         self.set_whitelist_text.pack(fill='both', expand=True)
+
+        perf_body = settings_card(
+            self._settings_section_frames['Advanced'], 'Performance scanner', card_bg=CARD_BG, accent=ACCENT)
+        ctk_theme.label(
+            perf_body,
+            'Use the parallel, incremental scanner for large or repeated scans. '
+            'Save Settings, then run a new scan to apply changes.',
+            text_color=MUTED, font_size=10, wraplength=720, justify='left',
+        ).pack(anchor='w', pady=(0, 10))
+
+        perf_header = ttk.Frame(perf_body, style='Card.TFrame')
+        perf_header.pack(fill='x', pady=(0, 10))
+        self._perf_status_lbl = ctk_theme.label(
+            perf_header, '', text_color=TEXT, font_size=10,
+        )
+        self._perf_status_lbl.pack(side='left')
+        self._perf_status_pill = ctk_theme.label(
+            perf_header, '', text_color=ON_ACCENT, font_size=9,
+            fg_color=ACCENT_SOFT, corner_radius=6, padx=8, pady=2,
+        )
+        self._perf_status_pill.pack(side='right')
+
+        perf_grid = ttk.Frame(perf_body, style='Card.TFrame')
+        perf_grid.pack(fill='x')
+        for col in (0, 1):
+            perf_grid.columnconfigure(col, weight=1 if col else 0)
+
+        def _perf_spin_row(row, label, var, lo, hi, inc=1):
+            ttk.Label(perf_grid, text=label, style='CardInfo.TLabel').grid(
+                row=row, column=0, sticky='e', pady=6)
+            ttk.Spinbox(perf_grid, from_=lo, to=hi, increment=inc, textvariable=var,
+                        width=10).grid(row=row, column=1, sticky='w', pady=6, padx=(10, 0))
+
+        _perf_spin_row(0, 'Max worker threads:', self.set_performance_workers, 0, 64)
+        _perf_spin_row(1, 'Memory limit (MB):', self.set_performance_memory, 64, 65536, 64)
+        ctk_theme.switch(
+            perf_grid, 'Enable performance scanner', self.set_performance_scan,
+            text_color=TEXT, progress_color=ACCENT,
+            button_color=BORDER, button_hover_color=ACCENT,
+        ).grid(row=2, column=0, columnspan=2, sticky='w', pady=(6, 0))
+        ctk_theme.switch(
+            perf_grid, 'Incremental scan (skip unchanged files)', self.set_performance_incremental,
+            text_color=TEXT, progress_color=ACCENT,
+            button_color=BORDER, button_hover_color=ACCENT,
+        ).grid(row=3, column=0, columnspan=2, sticky='w', pady=(6, 0))
+
+        ttk.Separator(perf_body, orient='horizontal').pack(fill='x', pady=(16, 12))
+        action_row = ttk.Frame(perf_body, style='Card.TFrame')
+        action_row.pack(fill='x')
+        action_row.columnconfigure(0, weight=1)
+        action_btns = ttk.Frame(action_row, style='Card.TFrame')
+        action_btns.grid(row=0, column=1, sticky='e')
+        ttk.Button(
+            action_btns, text='Run Benchmark…', style='Action.TButton',
+            command=self._run_benchmark,
+        ).pack(side='left')
+        ttk.Button(
+            action_btns, text='Clear Cache', style='Action.TButton',
+            command=self._clear_performance_cache,
+        ).pack(side='left', padx=(8, 0))
+        ctk_theme.label(
+            action_row,
+            'Clearing the cache resets incremental state so the next scan starts fresh.',
+            text_color=MUTED, font_size=9,
+        ).grid(row=0, column=0, sticky='w', pady=(4, 0))
+
+        self._update_perf_status = self._build_perf_status_updater()
+        self._update_perf_status()
 
         self._settings_scroll_spacer = ctk.CTkFrame(content, fg_color=BG, height=20, corner_radius=0)
         self._settings_scroll_spacer.pack(fill='x', pady=(4, 12))
@@ -4232,6 +4313,13 @@ class StartupManagerGUI(ctk.CTk):
             self.set_whitelist_text.insert(
                 '1.0', '# Paths Cleanroom must never scan or archive\n')
         self.set_prune_recent_days.set(int(cfg.get('prune_recent_days', 7)))
+        perf_cfg = cfg.get('performance', {}) or {}
+        self.set_performance_scan.set(bool(cfg.get('performance_scan', False)))
+        self.set_performance_workers.set(int(perf_cfg.get('max_workers', 0)))
+        self.set_performance_memory.set(int(perf_cfg.get('memory_limit_mb', 512)))
+        self.set_performance_incremental.set(bool(perf_cfg.get('incremental', True)))
+        if hasattr(self, '_update_perf_status'):
+            self._update_perf_status()
         prefs = load_ui_prefs()
         self.set_scan_on_startup.set(bool(prefs.get('scan_on_startup', False)))
         self.set_remember_geometry.set(bool(prefs.get('remember_window_geometry', True)))
@@ -4263,6 +4351,81 @@ class StartupManagerGUI(ctk.CTk):
         except Exception as e:
             messagebox.showerror('Data folder', f'Unable to open data folder:\n{e}')
 
+    def _build_perf_status_updater(self):
+        def update():
+            enabled = bool(self.set_performance_scan.get())
+            workers = int(self.set_performance_workers.get())
+            memory = int(self.set_performance_memory.get())
+            incremental = bool(self.set_performance_incremental.get())
+            workers_text = 'auto' if workers == 0 else str(workers)
+            self._perf_status_lbl.configure(
+                text=f'{workers_text} workers • {memory} MB • {"incremental" if incremental else "full"}')
+            self._perf_status_pill.configure(
+                text='Enabled' if enabled else 'Disabled',
+                fg_color=ACCENT if enabled else BORDER,
+            )
+        return update
+
+    def _run_benchmark(self):
+        cfg = self._load_cleanup_config()
+        if cfg is None:
+            return
+        paths = cfg.get('paths', [])
+        if not paths:
+            messagebox.showinfo('Benchmark', 'No scan folders configured. Add folders in Settings → Scan folders first.')
+            return
+        perf_cfg = cfg.get('performance', {})
+        try:
+            import performance_engine as pe
+            options = pe.ScanOptions(
+                max_workers=int(perf_cfg.get('max_workers', 0)),
+                memory_limit_mb=int(perf_cfg.get('memory_limit_mb', 512)),
+                incremental=True,
+            )
+        except Exception:
+            messagebox.showerror('Benchmark', 'Performance engine is not available.')
+            return
+        self._set_status('Running performance benchmark…')
+        cache_dir = brand.user_data_dir() / 'benchmark_cache'
+
+        def work():
+            return pe.benchmark_scan(paths, iterations=2, options=options, cache_dir=cache_dir)
+
+        def done(result, err):
+            if err is not None:
+                self._set_status('Benchmark failed')
+                messagebox.showerror('Benchmark', f'Benchmark failed:\n{err}')
+                return
+            self._set_status('Benchmark complete')
+            lines = [
+                'Performance Benchmark Results',
+                '',
+                f"Full scan average:        {result['full_scan_avg_time_s']:.2f}s  "
+                f"({result['full_scan_avg_files_per_second']:.0f} files/s)",
+                f"Incremental scan average: {result['incremental_scan_avg_time_s']:.2f}s  "
+                f"({result['incremental_scan_avg_files_per_second']:.0f} files/s)",
+                '',
+                'Full scan details:',
+            ]
+            for r in result['full_scan']:
+                lines.append(f"  Iteration {r['iteration']}: {r['files']} files in {r['time_s']:.2f}s")
+            lines.append('Incremental scan details:')
+            for r in result['incremental_scan']:
+                lines.append(f"  Iteration {r['iteration']}: {r['files']} files in {r['time_s']:.2f}s")
+            messagebox.showinfo('Benchmark', '\n'.join(lines))
+
+        self._run_bg(work, done)
+
+    def _clear_performance_cache(self):
+        try:
+            import performance_engine as pe
+            data_dir = brand.user_data_dir()
+            for name in ('performance_cache', 'dedupe_cache', 'benchmark_cache'):
+                pe.clear_scan_cache(data_dir / name)
+            messagebox.showinfo('Clear Cache', 'Performance scan cache cleared. The next scan will start fresh.')
+        except Exception as e:
+            messagebox.showerror('Clear Cache', f'Failed to clear cache:\n{e}')
+
     def save_settings(self):
         try:
             cfg = cleanup_main.load_config(self.cleanup_config_path) if cleanup_main else {}
@@ -4282,9 +4445,15 @@ class StartupManagerGUI(ctk.CTk):
             'size_threshold_mb': int(self.set_size_mb.get()),
             'confirm_threshold_bytes': int(float(self.set_confirm_gb.get()) * 1024 ** 3),
             'extensions_archive': exts,
-            'exclude_patterns': [l.strip() for l in self.set_exclude_text.get('1.0', 'end').splitlines() if l.strip()],
-            'whitelist': [l.strip() for l in self.set_whitelist_text.get('1.0', 'end').splitlines() if l.strip()],
+            'exclude_patterns': [line.strip() for line in self.set_exclude_text.get('1.0', 'end').splitlines() if line.strip()],
+            'whitelist': [line.strip() for line in self.set_whitelist_text.get('1.0', 'end').splitlines() if line.strip()],
             'prune_recent_days': int(self.set_prune_recent_days.get()),
+            'performance_scan': bool(self.set_performance_scan.get()),
+            'performance': {
+                'max_workers': int(self.set_performance_workers.get()),
+                'memory_limit_mb': int(self.set_performance_memory.get()),
+                'incremental': bool(self.set_performance_incremental.get()),
+            },
         })
         self.dedupe_enabled.set(bool(self.set_dedupe_default.get()))
         prefs = load_ui_prefs()
@@ -4303,7 +4472,7 @@ class StartupManagerGUI(ctk.CTk):
                 break
         save_ui_prefs(prefs)
         try:
-            written_to = self._write_config(cfg)
+            self._write_config(cfg)
         except Exception as e:
             messagebox.showerror('Settings', f'Unable to save settings:\n{e}')
             return
@@ -5388,7 +5557,6 @@ class StartupManagerGUI(ctk.CTk):
         """Disable archive restore/delete/search until custody records are loaded."""
         busy = getattr(self, '_archive_busy', False)
         loaded = getattr(self, '_archive_loaded', False) and not busy
-        total = int((getattr(self, '_archive_stats', {}) or {}).get('total', 0) or 0)
         sel = len(self.archive_tree.selection()) if hasattr(self, 'archive_tree') else 0
         can_restore = loaded and sel > 0
         can_delete = loaded and sel > 0
@@ -5927,12 +6095,20 @@ class StartupManagerGUI(ctk.CTk):
             def skip_check(folder):
                 return folder in skip_folders
 
-            items = cleanup_main.scan_candidates(
-                cfg,
-                cancel_check=self._scan_cancel_event.is_set,
-                on_progress=progress_cb,
-                skip_folder_check=skip_check,
-            )
+            if cfg.get('performance_scan'):
+                items = cleanup_main.scan_candidates_fast(
+                    cfg,
+                    cancel_check=self._scan_cancel_event.is_set,
+                    on_progress=progress_cb,
+                    skip_folder_check=skip_check,
+                )
+            else:
+                items = cleanup_main.scan_candidates(
+                    cfg,
+                    cancel_check=self._scan_cancel_event.is_set,
+                    on_progress=progress_cb,
+                    skip_folder_check=skip_check,
+                )
             cancelled = self._scan_cancel_event.is_set()
             return {'items': items, 'cancelled': cancelled, 'cfg': cfg}
 
@@ -6875,7 +7051,6 @@ class StartupManagerGUI(ctk.CTk):
             has and bool(entry.get('present'))
             and entry.get('kind') not in ('prune', 'restore')
         )
-        has_path = has and bool(entry.get('dest') or entry.get('src'))
         has_arch = has and bool(entry.get('dest'))
         has_src = has and bool(entry.get('src'))
         self._show_row_popover(

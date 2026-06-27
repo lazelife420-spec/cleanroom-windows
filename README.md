@@ -81,7 +81,7 @@ Full release notes: [`docs/RELEASE-v1.0.4.md`](docs/RELEASE-v1.0.4.md)
 | No undo | **Cleanroom Rewind** — roll back a whole day |
 | Fake "space freed" totals | **OS-measured** free-space before/after |
 | Scare tactics | **Custody Trust Score** — verify artifacts on disk |
-| Closed source, bundled junk | Open source, **347+ tests**, local-only |
+| Closed source, bundled junk | Open source, **366+ tests**, local-only |
 
 ---
 
@@ -97,6 +97,7 @@ Full release notes: [`docs/RELEASE-v1.0.4.md`](docs/RELEASE-v1.0.4.md)
 | **Custody Trust Score** | 0–100 — % of archived artifacts verified on disk |
 | **Proof Pack (HTML)** | Shareable audit report for your full history |
 | **Program guidance** | Local-only advice before uninstall or Force Remove |
+| **Performance scanning** | Parallel/incremental scanner for millions of files — see [`docs/PERFORMANCE_ENGINE.md`](docs/PERFORMANCE_ENGINE.md) |
 
 For README and launch screenshots, open the bundled demo Proof Pack (100% custody verified — not a gaps-detected example):
 

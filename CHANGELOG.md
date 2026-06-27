@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026-06-26 — Performance engine for large file sets
+
+- **High-performance scanner** — Rewrote `performance_engine.py` with:
+  - Parallel directory scanning via thread pool.
+  - SQLite-backed incremental scan state so unchanged files are skipped on repeat runs.
+  - Memory-aware governor that pauses work when RSS approaches the configured limit.
+  - Memory-mapped hashing for large files and size-first duplicate detection.
+  - Built-in `benchmark_scan()` that compares full vs. incremental scan speed.
+- **Integration with main.py** — Added `scan_candidates_fast()` and the `--fast-scan` CLI flag; enable via `performance_scan: true` or the `performance` config block.
+- **GUI integration** — `startup_manager_gui.py` uses the fast scanner when `performance_scan` is enabled; per-folder skipping is supported in the parallel path.
+- **GUI performance settings** — Added an Advanced settings card with toggles/inputs for `performance_scan`, `max_workers`, `memory_limit_mb`, and `incremental`.
+- **GUI benchmark button** — Added a **Run Benchmark…** button in the Performance scanner settings that compares full vs. incremental scan speed over the configured folders.
+- **Cache management** — Added a **Clear Cache** button in the Performance scanner settings and a `clear_scan_cache()` helper in `performance_engine.py` to reset the incremental scan state.
+- **Parallel deduplication** — `dedupe_candidates()` in `main.py` now uses `performance_engine.batch_hash_files()` for parallel hashing, falling back to the sequential `file_hash()` if the engine is unavailable.
+- **Tests** — Added `tests/test_performance_engine.py`, fast-scan integration tests, and a `dedupe_candidates` test in `tests/test_main.py`.
+- **Documentation** — Added `docs/PERFORMANCE_ENGINE.md` guide and `examples/performance_config.yaml` sample configuration.
+
 ## 2026-06-23 — v1.0.6 Proof Foundry branding patch
 
 - **The Proof Foundry™ branding** — README, release notes, app footer, first-run splash, receipt surfaces, and installer metadata identify Cleanroom as a Proof Foundry product.
