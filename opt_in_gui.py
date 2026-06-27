@@ -1,8 +1,8 @@
-import tkinter as tk
-from tkinter import messagebox
 import subprocess
 import sys
+import tkinter as tk
 from pathlib import Path
+from tkinter import messagebox
 
 CFG = Path(__file__).parent / 'cleanup_config.yaml'
 

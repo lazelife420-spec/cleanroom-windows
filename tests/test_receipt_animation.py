@@ -1,5 +1,4 @@
 """Receipt animation helpers — deterministic disable path."""
-import os
 
 from ui.receipt_animation import animations_disabled, play_receipt_animation
 

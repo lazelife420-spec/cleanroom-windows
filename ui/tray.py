@@ -516,7 +516,8 @@ class TrayController:
         return self._scan_running()
 
     def _build_menu(self):
-        from pystray import Menu, MenuItem as item
+        from pystray import Menu
+        from pystray import MenuItem as item
 
         return Menu(
             item(f'{brand.APP_DISPLAY} — archive-first', None, enabled=False),

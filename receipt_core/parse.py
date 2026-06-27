@@ -6,10 +6,8 @@ become warnings, not errors.
 from __future__ import annotations
 
 import re
-from datetime import datetime
 from pathlib import Path
 
-from receipt_core.paths import RECEIPT_EXT, RECEIPT_EXTENSIONS
 from receipt_core.schema import (
     Artifact,
     CustodySummary,

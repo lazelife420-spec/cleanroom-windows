@@ -4,10 +4,11 @@ These drive the real Tk application against a temporary sandbox directory,
 so nothing outside tmp_path is touched. Skipped automatically when no
 display is available.
 """
-from pathlib import Path
+# ruff: noqa: E402
 import os
 import sys
 import time
+from pathlib import Path
 
 import pytest
 
@@ -17,7 +18,6 @@ if str(project_dir) not in sys.path:
     sys.path.insert(0, str(project_dir))
 
 import json
-
 import tkinter as tk
 from tkinter import messagebox
 
@@ -106,8 +106,8 @@ def sandbox(tmp_path, monkeypatch):
     monkeypatch.setattr(startup_manager_admin, 'DISABLED_STORE', store)
 
     # Keep test receipts/history out of the user's real %LOCALAPPDATA%
-    import receipts as receipts_module
     import foresight as foresight_module
+    import receipts as receipts_module
     monkeypatch.setattr(receipts_module, 'RECEIPT_DIR', tmp_path / 'receipts')
     monkeypatch.setattr(foresight_module, 'HISTORY_PATH', tmp_path / 'disk_history.json')
     monkeypatch.setattr(foresight_module, 'HEALTH_PATH', tmp_path / 'health_history.json')
@@ -379,8 +379,8 @@ def test_uninstaller_tab_lists_programs_and_filters(sandbox):
 
 
 def test_time_machine_rolls_back_a_day(sandbox):
-    import timeline as timeline_module
     import restore as restore_module
+    import timeline as timeline_module
     app = sandbox['app']
     assert pump(app, lambda: len(app.cleanup_items) == 2)
     app.apply_cleanup()

@@ -4,8 +4,9 @@ from __future__ import annotations
 import struct
 from pathlib import Path
 
-import brand
 from PIL import Image
+
+import brand
 
 ROOT = Path(__file__).resolve().parents[1]
 

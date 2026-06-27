@@ -3,9 +3,10 @@
 
 This module is read-only by default and safe to run on non-Windows platforms.
 """
-from pathlib import Path
-import os
 import json
+import os
+from pathlib import Path
+
 
 def _get_startup_folders():
     folders = []

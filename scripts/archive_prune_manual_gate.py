@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# ruff: noqa: E402
 """Manual archive-only prune gate — disposable files, evidence-backed checks.
 
 Run from repo root after rebasing feature/in-app-receipts-archive-prune:
@@ -9,11 +10,9 @@ Prints PASS/FAIL checklist. Exit 0 only if all hard gates pass.
 """
 from __future__ import annotations
 
-import json
 import os
 import sys
 import time
-from datetime import datetime, timedelta
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]

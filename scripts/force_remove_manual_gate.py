@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# ruff: noqa: E402
 """Manual destructive-review gate for Force Remove — disposable targets only.
 
 Run from repo root on feature/local-uninstaller-guidance:

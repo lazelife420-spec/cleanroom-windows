@@ -2,8 +2,20 @@ import json
 import logging
 import os
 import queue
-import brand
+import shutil
+import signal
+import subprocess
+import sys
+import threading
+import time
+import tkinter as tk
+from datetime import datetime
+from pathlib import Path
+from tkinter import filedialog, messagebox, ttk
+
 import customtkinter as ctk
+
+import brand
 from ui import ctk_theme
 from ui.launcher import run_launch_splash
 from ui.page_layout import (
@@ -13,15 +25,6 @@ from ui.page_layout import (
     ensure_pane_sash,
     sync_split_workspace,
     sync_table_empty_view,
-)
-from ui.window_geometry import (
-    apply_window_geometry, bind_window_tracking, animations_disabled,
-)
-from ui.receipt_animation import (
-    DEFAULT_LINES,
-    PREVIEW_LINES,
-    PROOF_PACK_LINES,
-    play_receipt_animation,
 )
 from ui.page_state import (
     EMPTY_DONE,
@@ -34,6 +37,11 @@ from ui.page_state import (
     cleaner_page_state,
     home_page_state,
 )
+from ui.product_dialogs import (
+    CleanroomModal,
+    show_action_popover,
+    show_report_modal,
+)
 from ui.proof_dashboard import (
     CommandBar,
     ProofSummaryCard,
@@ -45,21 +53,17 @@ from ui.proof_dashboard import (
     settings_pill_nav,
     sidebar_nav_button,
 )
-from ui.product_dialogs import (
-    CleanroomModal,
-    show_action_popover,
-    show_report_modal,
+from ui.receipt_animation import (
+    DEFAULT_LINES,
+    PREVIEW_LINES,
+    PROOF_PACK_LINES,
+    play_receipt_animation,
 )
-import tkinter as tk
-from tkinter import ttk, messagebox, filedialog
-import threading
-import subprocess
-import sys
-import signal
-import shutil
-import time
-from datetime import datetime
-from pathlib import Path
+from ui.window_geometry import (
+    animations_disabled,
+    apply_window_geometry,
+    bind_window_tracking,
+)
 
 try:
     import yaml
@@ -112,7 +116,8 @@ except Exception:
     rec_engine = None
 
 try:
-    from PIL import Image as PILImage, ImageTk as PILImageTk
+    from PIL import Image as PILImage
+    from PIL import ImageTk as PILImageTk
 except Exception:
     PILImage = PILImageTk = None
 

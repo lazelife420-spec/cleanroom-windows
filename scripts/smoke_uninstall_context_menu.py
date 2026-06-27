@@ -1,4 +1,5 @@
 """Quick smoke test for uninstaller right-click context menu."""
+# ruff: noqa: E402
 from __future__ import annotations
 
 import os

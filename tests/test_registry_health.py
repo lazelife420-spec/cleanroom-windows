@@ -26,7 +26,9 @@ def test_extract_exe_path_quoted():
 
 def test_extract_exe_path_unquoted_with_spaces_prefers_existing_prefix():
     target = r'C:\Program Files\Foo\foo.exe'
-    exists = lambda p: p == target
+    def exists(path):
+        return path == target
+
     assert rh.extract_exe_path(r'C:\Program Files\Foo\foo.exe /silent',
                                exists=exists) == target
 
@@ -48,7 +50,9 @@ def test_is_broken_command_missing_file_is_broken():
 
 
 def test_is_broken_command_existing_file_is_healthy():
-    exists = lambda p: p == r'C:\ok\app.exe'
+    def exists(path):
+        return path == r'C:\ok\app.exe'
+
     assert not rh.is_broken_command(r'"C:\ok\app.exe" /run', exists=exists, which=no_which)
 
 
@@ -59,7 +63,9 @@ def test_is_broken_command_host_launchers_never_flagged():
 
 
 def test_is_broken_command_bare_name_resolved_via_path_is_healthy():
-    which = lambda n: r'C:\Windows\notepad.exe' if 'notepad' in n else None
+    def which(name):
+        return r'C:\Windows\notepad.exe' if 'notepad' in name else None
+
     assert not rh.is_broken_command('notepad', exists=never, which=which)
     assert rh.is_broken_command('definitely-not-a-real-binary', exists=never, which=no_which)
 
@@ -72,7 +78,9 @@ def test_scan_dead_startup_refs_flags_only_broken():
         ('HKEY_CURRENT_USER', r'Software\...\Run', 'Dead', r'"C:\gone\a.exe" -x'),
         ('HKEY_CURRENT_USER', r'Software\...\Run', 'Alive', r'"C:\ok\b.exe"'),
     ]
-    exists = lambda p: p == r'C:\ok\b.exe'
+    def exists(path):
+        return path == r'C:\ok\b.exe'
+
     issues = rh.scan_dead_startup_refs(values=values, exists=exists, which=no_which)
     assert [i['display'] for i in issues] == ['Dead']
     assert issues[0]['fix'] == 'delete-value'
@@ -84,7 +92,9 @@ def test_scan_broken_app_paths():
         ('HKEY_LOCAL_MACHINE', r'SOFTWARE\...\App Paths', 'gone.exe', r'"C:\gone\gone.exe"'),
         ('HKEY_LOCAL_MACHINE', r'SOFTWARE\...\App Paths', 'ok.exe', r'C:\ok\ok.exe'),
     ]
-    exists = lambda p: p == r'C:\ok\ok.exe'
+    def exists(path):
+        return path == r'C:\ok\ok.exe'
+
     issues = rh.scan_broken_app_paths(entries=entries, exists=exists)
     assert [i['display'] for i in issues] == ['gone.exe']
     assert issues[0]['fix'] == 'delete-key'

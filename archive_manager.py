@@ -3,9 +3,20 @@
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import List, Dict
+from typing import Dict, List
 
 import archive_custody
+
+
+def apply_prune(records, log_file, dry_run=False, receipt_dir=None, now=None):
+    """Compatibility wrapper for legacy callers that still import archive_manager."""
+    return archive_custody.apply_prune(
+        records,
+        log_file,
+        receipt_dir=receipt_dir,
+        dry_run=dry_run,
+        now=now,
+    )
 
 
 def get_archive_summary(archive_dir: str, log_file: str = "cleanup_log.json") -> Dict:

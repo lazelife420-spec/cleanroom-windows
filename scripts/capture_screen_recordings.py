@@ -209,10 +209,11 @@ def _seed_log_and_receipts(scan: Path, archive: Path, log_path: Path, receipt_di
 
 def _make_app(*, enable_tray: bool = False):
     os.environ['CLEANROOM_DISABLE_ANIMATIONS'] = '1'
-    import receipts as receipts_module
-    import foresight as foresight_module
-    import startup_manager_gui as gui_module
     from tkinter import messagebox
+
+    import foresight as foresight_module
+    import receipts as receipts_module
+    import startup_manager_gui as gui_module
 
     _orig_askyesno = messagebox.askyesno
 
@@ -507,7 +508,6 @@ def _flow_08_tray() -> None:
 
 
 def _write_readme(*, pytest_result: str, process_result: str) -> None:
-    import brand
     import subprocess as sp
 
     commit = sp.check_output(['git', 'rev-parse', '--short', 'HEAD'], text=True).strip()

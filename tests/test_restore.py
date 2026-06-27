@@ -3,6 +3,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+
 def test_restore_moves_file(tmp_path):
     ROOT = Path(__file__).resolve().parents[1]
     RESTORE = ROOT / 'restore.py'
@@ -22,7 +23,7 @@ def test_restore_moves_file(tmp_path):
     plan_file.write_text(json.dumps(plan))
 
     # run restore in apply mode
-    p = subprocess.run([sys.executable, str(RESTORE), '--log', str(plan_file), '--apply'], capture_output=True, text=True)
+    subprocess.run([sys.executable, str(RESTORE), '--log', str(plan_file), '--apply'], capture_output=True, text=True)
     # after apply, the archived file should have been moved to original
     assert original.exists()
     assert not archive.exists()

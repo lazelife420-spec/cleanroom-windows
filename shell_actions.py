@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import shutil
-import sys
 from datetime import datetime
 from pathlib import Path
 
@@ -108,8 +107,8 @@ def delete_archive_path(path, config_path=None):
         return False, 'Refusing delete: path is not under the Cleanroom archive folder.'
     log_path = _log_path(cfg)
     try:
-        import restore as restore_module
         import archive_custody as ac
+        import restore as restore_module
     except ImportError:
         return False, 'Archive modules unavailable'
     actions = []

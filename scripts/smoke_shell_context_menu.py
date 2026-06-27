@@ -1,4 +1,5 @@
 """Smoke test for Archive/Restore in-app right-click context menus."""
+# ruff: noqa: E402
 from __future__ import annotations
 
 import os

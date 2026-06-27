@@ -1,7 +1,13 @@
 """Tests for local program guidance heuristics."""
 from program_advice import (
-    KEEP, OPTIONAL, SAFE_IF_UNUSED, CAUTION, USUALLY_KEEP,
-    analyze_program, parse_uninstall_exe, uninstaller_exe_exists,
+    CAUTION,
+    KEEP,
+    OPTIONAL,
+    SAFE_IF_UNUSED,
+    USUALLY_KEEP,
+    analyze_program,
+    parse_uninstall_exe,
+    uninstaller_exe_exists,
 )
 
 

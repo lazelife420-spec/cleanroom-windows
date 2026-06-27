@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """Advanced configuration system with profiles, rules engine, and learning."""
-import yaml
+import logging
+from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Any, Optional
-from dataclasses import dataclass, asdict
-import logging
+from typing import Any, Dict, List, Optional
+
+import yaml
 
 logger = logging.getLogger(__name__)
 

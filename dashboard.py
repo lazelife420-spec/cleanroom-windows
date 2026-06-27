@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Web dashboard for monitoring and managing smart cleanup operations."""
 import json
+import logging
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List
-import logging
 
 try:
     from flask import Flask, jsonify, request

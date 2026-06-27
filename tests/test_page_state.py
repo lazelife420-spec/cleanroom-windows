@@ -1,7 +1,6 @@
 """Page state helpers."""
 from ui.page_state import (
     EMPTY_DONE,
-    ERROR,
     IDLE_READY,
     LOADING,
     RECEIPT_READY,

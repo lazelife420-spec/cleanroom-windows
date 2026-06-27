@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import argparse
-from pathlib import Path
 from datetime import datetime, timedelta
+from pathlib import Path
 
 
 def prune(archive_dir: Path, days: int, apply: bool):
