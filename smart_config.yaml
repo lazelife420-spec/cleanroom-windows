@@ -1,0 +1,130 @@
+version: '2.0'
+profiles:
+  conservative:
+    name: conservative
+    description: Safe cleanup for important files
+    paths:
+    - ~/Downloads
+    - ~/Desktop
+    rules:
+    - old_temp
+    - zero_byte
+    - browser_cache
+    schedule: weekly
+    enabled: true
+  aggressive:
+    name: aggressive
+    description: Maximum cleanup for power users
+    paths:
+    - ~/Downloads
+    - ~/Desktop
+    - ~/AppData/Local/Temp
+    rules:
+    - old_temp
+    - zero_byte
+    - browser_cache
+    - old_installers
+    - large_files
+    schedule: daily
+    enabled: true
+  gaming:
+    name: gaming
+    description: Optimized for gaming systems
+    paths:
+    - ~/Downloads
+    - ~/AppData/Local/Temp
+    rules:
+    - old_temp
+    - zero_byte
+    - browser_cache
+    - game_cache
+    schedule: daily
+    enabled: true
+rules:
+  old_temp:
+    name: old_temp
+    enabled: true
+    conditions:
+      age_days: 7
+      paths:
+      - '*Temp*'
+      - '*tmp*'
+      size_max: 100MB
+    actions:
+      operation: delete
+      priority: high
+    priority: 0
+  zero_byte:
+    name: zero_byte
+    enabled: true
+    conditions:
+      size_exact: 0
+      exclude_patterns:
+      - '*.gitkeep'
+      - '*.keep'
+    actions:
+      operation: delete
+      priority: high
+    priority: 0
+  browser_cache:
+    name: browser_cache
+    enabled: true
+    conditions:
+      paths:
+      - '*Cache*'
+      - '*cache*'
+      extensions:
+      - .tmp
+      - .cache
+      age_days: 3
+    actions:
+      operation: delete
+      priority: medium
+    priority: 0
+  old_installers:
+    name: old_installers
+    enabled: true
+    conditions:
+      extensions:
+      - .exe
+      - .msi
+      - .zip
+      age_days: 30
+      size_min: 10MB
+    actions:
+      operation: archive
+      priority: medium
+    priority: 0
+  large_files:
+    name: large_files
+    enabled: true
+    conditions:
+      size_min: 500MB
+      age_days: 14
+      exclude_patterns:
+      - '*.iso'
+      - '*.backup'
+    actions:
+      operation: review
+      priority: low
+    priority: 0
+  game_cache:
+    name: game_cache
+    enabled: true
+    conditions:
+      paths:
+      - '*Steam*'
+      - '*Epic Games*'
+      - '*Origin*'
+      extensions:
+      - .cache
+      - .log
+      - .tmp
+      age_days: 1
+    actions:
+      operation: delete
+      priority: medium
+    priority: 0
+learning: {}
+global_settings: {}
+last_updated: '2026-06-26T17:52:31.480080'

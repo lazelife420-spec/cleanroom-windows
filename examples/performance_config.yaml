@@ -1,0 +1,36 @@
+# Example Cleanroom configuration that enables the high-performance scan engine.
+# Place this next to cleanup_config.yaml or pass it via --config.
+paths:
+  - C:/Users/%USERNAME%/Downloads
+  - C:/Users/%USERNAME%/AppData/Local/Temp
+
+# Enable the parallel/incremental scanner from performance_engine.py.
+performance_scan: true
+performance:
+  max_workers: 8
+  memory_limit_mb: 1024
+  incremental: true
+  force_rescan: false
+
+# Standard cleanup rules (same as the default scanner).
+dry_run: true
+age_days:
+  temp: 7
+  installers: 30
+size_threshold_mb: 200
+extensions_archive:
+  - .msi
+  - .exe
+  - .zip
+  - .7z
+  - .rar
+exclude_patterns: []
+whitelist: []
+archive_dir: C:/Users/%USERNAME%/Downloads/cleanup_archive
+log_file: C:/Users/%USERNAME%/AppData/Local/Cleanroom/cleanup_log.json
+plan_file: C:/Users/%USERNAME%/AppData/Local/Cleanroom/cleanup_plan.json
+confirm_threshold_bytes: 5368709120
+
+telemetry:
+  enabled: false
+  usage_log: C:/Users/%USERNAME%/AppData/Local/Cleanroom/usage_log.json
