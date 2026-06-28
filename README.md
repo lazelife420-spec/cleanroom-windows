@@ -18,7 +18,9 @@ Cleanroom is a Proof Foundry product.
 
 Repository: [`cleanroom-windows`](https://github.com/Z3r0DayZion-install/cleanroom-windows)
 
-**Latest release:** [Cleanroom v1.0.6](https://github.com/Z3r0DayZion-install/cleanroom-windows/releases/tag/v1.0.6) — `Cleanroom-Setup-1.0.6.exe` + `SHA256SUMS.txt` (CI-built, attestable)
+**Latest GitHub release:** [Cleanroom v1.0.6](https://github.com/Z3r0DayZion-install/cleanroom-windows/releases/tag/v1.0.6) — `Cleanroom-Setup-1.0.6.exe` + `SHA256SUMS.txt` (CI-built, attestable)
+
+**Latest repo milestone:** [`v1.0.7-rc1`](docs/RELEASE-v1.0.7-rc1.md) — Ruff-clean, telemetry shim fixed, docs aligned with the current desktop product path
 
 ![Cleanroom Review](https://github.com/Z3r0DayZion-install/cleanroom-windows/releases/download/v1.0.6/cleanroom-review.png)
 
@@ -107,14 +109,24 @@ Launch screenshots live in [`assets/screenshots/`](assets/screenshots/).
 
 ---
 
+## Current repo state
+
+- tests: `python -m pytest -p no:xonsh tests/` -> `366 passed`
+- lint: `python -m ruff check .` -> clean under current repo config
+- active product path: Cleanroom desktop GUI + CLI/headless support
+- legacy smart-clean modules remain present but are not the primary supported surface
+
+---
+
 ## Quick start
 
 ```powershell
 python -m pip install -r requirements.txt
+python -m ruff check .
 python startup_manager_gui.py
 ```
 
-Or install the latest release: [v1.0.6](https://github.com/Z3r0DayZion-install/cleanroom-windows/releases/tag/v1.0.6).
+Or install the latest GitHub release: [v1.0.6](https://github.com/Z3r0DayZion-install/cleanroom-windows/releases/tag/v1.0.6).
 
 ### Tests
 
@@ -181,6 +193,11 @@ timeline.py              # Cleanroom Rewind day buckets
 uninstaller.py           # Programs list, leftovers, force remove
 registry_health.py       # Evidence-based registry repair
 ```
+
+## Legacy modules
+
+Legacy smart-clean support modules are still in the repository for reference and
+compatibility work, but they are not the primary supported Cleanroom surface.
 
 ---
 
