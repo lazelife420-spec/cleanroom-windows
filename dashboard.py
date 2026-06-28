@@ -94,7 +94,7 @@ class Dashboard:
             files = data.get('files', [])
 
             try:
-                import archive_manager
+                import archive_runtime
                 log_file = 'cleanup_log.json'
 
                 # Convert files to archive_custody format
@@ -108,7 +108,7 @@ class Dashboard:
                         'when': datetime.now().isoformat()
                     })
 
-                result = archive_manager.apply_prune(records, log_file, dry_run=False)
+                result = archive_runtime.apply_prune(records, log_file, dry_run=False)
 
                 return jsonify({
                     'success': True,
@@ -557,13 +557,13 @@ class Dashboard:
     def _get_archive_info(self) -> Dict:
         """Get archive information."""
         try:
-            import archive_manager
+            import archive_runtime
 
             archive_dir = 'cleanup_archive'
-            summary = archive_manager.get_archive_summary(archive_dir)
+            summary = archive_runtime.get_archive_summary(archive_dir)
 
             # Get file details
-            files = archive_manager.browse_archive(archive_dir, limit=50)
+            files = archive_runtime.browse_archive(archive_dir, limit=50)
 
             return {
                 'total_size': summary.get('archive_size_mb', 0) * 1024 * 1024,  # Convert to bytes

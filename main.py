@@ -744,8 +744,8 @@ def main():
     # Handle profile-based cleanup requests
     if getattr(args, 'profile', None):
         try:
-            import smart_config
-            smart_cfg = smart_config.SmartConfig()
+            import cleanup_profiles
+            smart_cfg = cleanup_profiles.SmartConfig()
             profile = smart_cfg.get_profile(args.profile)
 
             if not profile:
@@ -794,18 +794,18 @@ def main():
     # Handle archive management requests
     if getattr(args, 'archive', None):
         try:
-            import archive_manager
+            import archive_runtime
             archive_dir = cfg.get('archive_dir') or str(Path(__file__).parent / 'cleanup_archive')
             log_file = cfg.get('log_file') or 'cleanup_log.json'
 
             if args.archive == 'summary':
-                summary = archive_manager.get_archive_summary(archive_dir, log_file)
-                archive_manager.display_archive_summary(summary)
+                summary = archive_runtime.get_archive_summary(archive_dir, log_file)
+                archive_runtime.display_archive_summary(summary)
             elif args.archive == 'browse':
-                files = archive_manager.browse_archive(archive_dir, limit=50)
-                archive_manager.display_archive_files(files)
+                files = archive_runtime.browse_archive(archive_dir, limit=50)
+                archive_runtime.display_archive_files(files)
             elif args.archive == 'manage':
-                archive_manager.interactive_archive_cleanup(archive_dir, log_file)
+                archive_runtime.interactive_archive_cleanup(archive_dir, log_file)
             return
         except ImportError:
             print("Archive management not available - missing archive_manager.py")
