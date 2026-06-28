@@ -10,6 +10,7 @@ This repository is primarily a **Windows desktop app called Cleanroom**: a local
 The **active, well-tested product surface is the Cleanroom desktop path**, not the older "Smart Cleaner" web/scheduler experiment. The current codebase is in a good functional state:
 
 - `366` tests pass locally with `python -m pytest -p no:xonsh tests/`
+- `python -m ruff check .` is clean under the current repo config
 - core modules compile successfully
 - packaging/build scripts and release docs are present
 
@@ -88,7 +89,7 @@ Results:
 
 - `pytest`: `366 passed`
 - `compileall`: passed for requested modules
-- `ruff`: initially failed with `66` findings; after targeted cleanup in audited modules it is down to `61`
+- `ruff`: clean under the current repo config
 
 ## Audit Findings
 
@@ -101,22 +102,7 @@ Results:
 
 ### Important risks / cleanup debt
 
-#### 1. Lint status does not match release messaging
-
-`docs/RELEASE-v1.0.7-rc1.md` says `ruff clean`, but the current local `ruff check .` still reports `61` findings after targeted cleanup.
-
-Most are maintainability issues rather than obvious runtime breakage, but future work should treat the repo as **test-clean, not lint-clean**.
-
-#### 2. `enable_telemetry.py` is malformed / merged together
-
-`enable_telemetry.py` currently contains two different implementations concatenated into one file:
-
-- a JSON-based local opt-in helper at the top
-- a second CLI/YAML-editing script appended below
-
-This causes `ruff` errors (`E402`, `F811`) and makes the module confusing to maintain. Tests still pass, so this is likely hidden by limited usage rather than being truly clean.
-
-#### 3. Legacy "Smart Cleaner" modules are still present and appear partially stale
+#### 1. Legacy "Smart Cleaner" modules are still present and appear partially stale
 
 The following files look like an older product direction that survived the Cleanroom rebrand:
 
@@ -133,18 +119,18 @@ Concerns:
 - they reference alternate config flows (`smart_config.yaml`, profile-based cleanup)
 - they appear only loosely integrated with the current desktop-first product
 
-#### 4. `dashboard.py` likely has a broken delete path
+#### 2. `dashboard.py` likely has a broken delete path
 
 `dashboard.py` calls `archive_manager.apply_prune(...)`, but `archive_manager.py` does not define a module-level `apply_prune` function. It uses `archive_custody.apply_prune(...)` internally instead.
 
 That strongly suggests the dashboard archive-delete API is broken unless another indirection is added later.
 
-#### 5. Release/status docs have some drift
+#### 3. Release/status docs have some drift
 
 Examples:
 
 - `README.md` advertises latest release `v1.0.6`
-- `docs/RELEASE-v1.0.7-rc1.md` exists with newer claims
+- `docs/RELEASE-v1.0.7-rc1.md` exists with newer repo-state claims than the tagged GitHub release
 - `HANDOFF.md` contains older milestone/test-count history mixed with still-useful architecture notes
 
 The documentation is valuable, but future sessions should cross-check docs against code/tests before assuming a release claim is current.
@@ -162,18 +148,15 @@ Unsafe assumptions:
 
 - that all docs are perfectly current
 - that legacy smart modules are production-ready
-- that the repo is lint-clean
 - that release-candidate notes automatically reflect the current tree
 
 ## Recommended Next Steps
 
 If the next task is maintenance/hardening, the highest-leverage steps are:
 
-1. Split/fix `enable_telemetry.py`
-2. Decide whether `dashboard.py` / `smart_*` modules are supported or should be retired
-3. Add CI linting if lint cleanliness matters
-4. Reconcile release docs/status docs with actual current state
-5. Keep future feature work centered on the tested Cleanroom path unless explicitly reviving the legacy smart modules
+1. Decide whether `dashboard.py` / `smart_*` modules are supported or should be retired
+2. Reconcile release docs/status docs with actual current tagged release
+3. Keep future feature work centered on the tested Cleanroom path unless explicitly reviving the legacy smart modules
 
 ## Best Commands for Future Sessions
 
