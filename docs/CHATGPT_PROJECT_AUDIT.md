@@ -14,7 +14,10 @@ The **active, well-tested product surface is the Cleanroom desktop path**, not t
 - core modules compile successfully
 - packaging/build scripts and release docs are present
 
-The repo also contains **legacy or partially integrated smart-clean modules** (`dashboard.py`, `smart_config.py`, `smart_scheduler.py`, `archive_manager.py`, `README_SMART.md`). These are useful context, but they should not be assumed production-ready without additional validation.
+The repo also contains **legacy or partially integrated smart-clean modules**
+(`dashboard.py`, `smart_config.py`, `archive_manager.py`, and archived material
+under `legacy/smart_cleaner/`). These are useful context, but they should not
+be assumed production-ready without additional validation.
 
 ## What Is Implemented and Verified
 
@@ -108,9 +111,9 @@ The following files look like an older product direction that survived the Clean
 
 - `dashboard.py`
 - `smart_config.py`
-- `smart_scheduler.py`
+- `legacy/smart_cleaner/smart_scheduler.py`
 - `archive_manager.py`
-- `README_SMART.md`
+- `legacy/smart_cleaner/README_SMART.md`
 
 Concerns:
 

@@ -56,15 +56,15 @@ These appear informational and would not block runtime if updated later:
 
 - [docs/CHATGPT_PROJECT_AUDIT.md](C:/Users/KickA/smart_clean_tool/docs/CHATGPT_PROJECT_AUDIT.md)
   describes the legacy modules and their risks
-- [README_SMART.md](C:/Users/KickA/smart_clean_tool/README_SMART.md) is the
-  legacy product README and references `dashboard.py`, `smart_config.py`,
+- [README_SMART.md](C:/Users/KickA/smart_clean_tool/legacy/smart_cleaner/README_SMART.md)
+  is the legacy product README and references `dashboard.py`, `smart_config.py`,
   `smart_scheduler.py`, and `smart_config.yaml`
 
 Notes:
 
 - Most `README.md`, release-note, and UI "dashboard" hits are about the
   current Cleanroom proof dashboard, not the legacy `dashboard.py` web app.
-- `legacy.smart_cleaner` had no hits.
+- At the time of the original dependency audit, `legacy.smart_cleaner` had no hits.
 
 ## Tests / Packaging / CI / Release Tooling
 
