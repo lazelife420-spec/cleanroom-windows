@@ -196,8 +196,9 @@ registry_health.py       # Evidence-based registry repair
 
 ## Legacy modules
 
-Legacy smart-clean support modules are still in the repository for reference and
-compatibility work, but they are not the primary supported Cleanroom surface.
+Legacy smart-clean support modules are archived under `legacy/` for reference
+and compatibility work, but they are not the primary supported Cleanroom
+surface.
 
 ---
 

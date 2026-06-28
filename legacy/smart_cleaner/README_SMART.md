@@ -1,5 +1,8 @@
 # 🧹 Smart Cleaner - Professional Grade Cleanup System
 
+Archived under `legacy/smart_cleaner/`. Root-level compatibility shims remain
+for `smart_config.py`, `smart_scheduler.py`, and `archive_manager.py`.
+
 A comprehensive, intelligent file cleanup system with machine learning, web dashboard, and advanced automation capabilities.
 
 ## ✨ Key Features
