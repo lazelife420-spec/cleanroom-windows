@@ -15,7 +15,8 @@ Cleanroom desktop GUI + CLI/headless flow as the active supported product path.
 ## Highlights
 - Parallel incremental scanner (performance engine)
 - Telemetry shim repaired and repo lint cleaned under the current configuration
-- Legacy smart-clean modules remain present, but they are not the primary supported surface
+- Active runtime boundary now lives in `cleanup_profiles.py` and `archive_runtime.py`
+- Legacy compatibility implementation/docs are archived, with root compatibility shims retained where needed
 - 366 tests passing, ruff clean
 
 ![Cleanroom Review](https://github.com/Z3r0DayZion-install/cleanroom-windows/releases/download/v1.0.6/cleanroom-review.png)

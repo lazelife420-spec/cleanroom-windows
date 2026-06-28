@@ -114,7 +114,8 @@ Launch screenshots live in [`assets/screenshots/`](assets/screenshots/).
 - tests: `python -m pytest -p no:xonsh tests/` -> `366 passed`
 - lint: `python -m ruff check .` -> clean under current repo config
 - active product path: Cleanroom desktop GUI + CLI/headless support
-- legacy smart-clean modules remain present but are not the primary supported surface
+- active runtime boundary: `main.py` / `dashboard.py` use `cleanup_profiles.py` and `archive_runtime.py`
+- legacy smart-clean modules remain archived under `legacy/`, with root compatibility shims where needed
 
 ---
 
