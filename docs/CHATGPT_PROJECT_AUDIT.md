@@ -1,6 +1,6 @@
 # Cleanroom Project Audit for Future ChatGPT Sessions
 
-Last updated: 2026-06-27
+Last updated: 2026-06-28
 Workspace: `C:\Users\KickA\smart_clean_tool`
 
 ## Executive Summary
@@ -14,10 +14,11 @@ The **active, well-tested product surface is the Cleanroom desktop path**, not t
 - core modules compile successfully
 - packaging/build scripts and release docs are present
 
-The repo also contains **legacy or partially integrated smart-clean modules**
-(`dashboard.py`, `smart_config.py`, `archive_manager.py`, and archived material
-under `legacy/smart_cleaner/`). These are useful context, but they should not
-be assumed production-ready without additional validation.
+The repo also contains **legacy or compatibility smart-clean modules**.
+The archived implementation/docs now live under `legacy/smart_cleaner/`, while
+root `smart_config.py`, `archive_manager.py`, and `smart_scheduler.py` remain
+as compatibility shims. They are useful context, but they should not be assumed
+production-ready without additional validation.
 
 ## What Is Implemented and Verified
 
@@ -69,6 +70,8 @@ These files are the best starting points for future work:
 
 - `startup_manager_gui.py`: app shell, tabs, actions, GUI orchestration
 - `main.py`: scanning, candidate generation, apply flow, headless CLI
+- `cleanup_profiles.py`: active cleanup profile/config runtime boundary
+- `archive_runtime.py`: active archive-management runtime boundary
 - `archive_custody.py`: archive browsing, ranking, pruning, summaries
 - `receipts.py` and `receipt_core/`: receipt pipeline
 - `uninstaller.py`: installed-program detection, leftovers, force remove
@@ -105,12 +108,13 @@ Results:
 
 ### Important risks / cleanup debt
 
-#### 1. Legacy "Smart Cleaner" modules are still present and appear partially stale
+#### 1. Legacy "Smart Cleaner" modules are archived, but still compatibility-only
 
-The following files look like an older product direction that survived the Cleanroom rebrand:
+The following files reflect an older product direction that survived the Cleanroom rebrand:
 
 - `dashboard.py`
 - `smart_config.py`
+- `smart_scheduler.py`
 - `legacy/smart_cleaner/smart_scheduler.py`
 - `archive_manager.py`
 - `legacy/smart_cleaner/README_SMART.md`
@@ -118,15 +122,18 @@ The following files look like an older product direction that survived the Clean
 Concerns:
 
 - branding is still "Smart Cleaner" in several places
-- these modules are not represented in the main test suite the way the Cleanroom path is
+- the archived modules are not represented in the main test suite the way the Cleanroom path is
 - they reference alternate config flows (`smart_config.yaml`, profile-based cleanup)
-- they appear only loosely integrated with the current desktop-first product
+- they are no longer part of the primary supported runtime path
 
 #### 2. `dashboard.py` likely has a broken delete path
 
-`dashboard.py` calls `archive_manager.apply_prune(...)`, but `archive_manager.py` does not define a module-level `apply_prune` function. It uses `archive_custody.apply_prune(...)` internally instead.
+`dashboard.py` used to call `archive_manager.apply_prune(...)` directly. The
+active runtime now routes through `archive_runtime.py`, while
+`archive_manager.py` remains a compatibility shim.
 
-That strongly suggests the dashboard archive-delete API is broken unless another indirection is added later.
+Future work should still treat the legacy web dashboard path cautiously, but it
+is no longer part of the active runtime dependency chain.
 
 #### 3. Release/status docs have some drift
 
@@ -157,8 +164,8 @@ Unsafe assumptions:
 
 If the next task is maintenance/hardening, the highest-leverage steps are:
 
-1. Decide whether `dashboard.py` / `smart_*` modules are supported or should be retired
-2. Reconcile release docs/status docs with actual current tagged release
+1. Reconcile release docs/status docs with actual current tagged release
+2. Decide whether the legacy `dashboard.py` path should remain compatibility-only or be retired later
 3. Keep future feature work centered on the tested Cleanroom path unless explicitly reviving the legacy smart modules
 
 ## Best Commands for Future Sessions
@@ -174,4 +181,4 @@ python main.py --headless-clean
 
 This is a **real, fairly advanced Windows cleanup app** with strong testing around its current desktop/receipt/proof architecture. The main product path is healthy.
 
-The biggest source of confusion is that the repo still carries an older "smart cleaner" branch of ideas and docs alongside the current Cleanroom code. Future work should treat those files as **legacy or experimental until revalidated**.
+The biggest source of confusion is that the repo still carries an older "smart cleaner" branch of ideas and docs alongside the current Cleanroom code. Those materials are now archived or shimmed, and future work should treat them as **legacy or experimental until revalidated**.

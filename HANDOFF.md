@@ -2,6 +2,7 @@
 
 Short summary
 - Cleanroom is a safe, archive-first Windows system-care suite with a Tkinter GUI (Optimizer / Activity / Startup / Cleaner / Uninstaller / Restore / Settings). Product doctrine: *archive first, prove every action, roll back*. Six themes (Emerald Pro = IObit-style green). Signature features: Disk Foresight, Cleanroom Rewind, Cleanroom Receipts, Custody Trust Score, Proof Pack.
+- Active supported product path: Cleanroom desktop GUI + CLI/headless. Active runtime boundaries live in `cleanup_profiles.py` and `archive_runtime.py`; legacy smart-cleaner implementation/docs are archived under `legacy/smart_cleaner/`, with root compatibility shims retained for `smart_config.py`, `archive_manager.py`, and `smart_scheduler.py`.
 
 Key files
 - `brand.py`: product identity (`APP_DISPLAY`, `APP_TAGLINE`, `APP_MOTTO`, brand assets, `user_data_dir()` with one-time SmartClean→Cleanroom migration + Migration Receipt)

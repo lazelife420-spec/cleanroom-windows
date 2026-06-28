@@ -4,11 +4,16 @@ Last updated: 2026-06-28
 Audit branch: `audit/legacy-smart-cleaner-dependencies`  
 Base commit: `9cfc482`
 
+Historical note: this audit captured the repo state before runtime decoupling
+and legacy archival. The follow-up sequence has since completed: active runtime
+imports now point at `cleanup_profiles.py` / `archive_runtime.py`, and the
+legacy scheduler/docs surface has moved under `legacy/smart_cleaner/`.
+
 ## Goal
 
 Identify every remaining reference to the legacy smart-cleaner modules before
-any archive or move, and separate harmless documentation mentions from active
-runtime dependencies.
+the archive/move sequence, and separate harmless documentation mentions from
+active runtime dependencies.
 
 Scope audited:
 
@@ -23,9 +28,10 @@ Scope audited:
 
 ## Summary
 
-The legacy smart-cleaner surface is **not archive-safe yet**.
+At the time of this audit, the legacy smart-cleaner surface was **not
+archive-safe yet**.
 
-There are still active runtime imports in the shipping tree:
+There were still active runtime imports in the shipping tree:
 
 - `main.py` imports `smart_config`
 - `main.py` imports `archive_manager`
@@ -37,7 +43,7 @@ to those module names.
 
 ## Runtime Imports
 
-These references would need code changes before any file move:
+These references required code changes before any file move:
 
 - [main.py](C:/Users/KickA/smart_clean_tool/main.py):747 imports `smart_config`
   for profile-based cleanup flow
@@ -88,18 +94,18 @@ Notes:
 
 ## Recommended Move / Archive Plan
 
-Do not move `smart_config.py`, `archive_manager.py`, or `dashboard.py` yet.
+This recommendation has now been carried out in later PRs.
 
 Recommended sequence:
 
 1. Remove or replace the active `main.py` imports for `smart_config` and
-   `archive_manager`.
+   `archive_manager`. Completed.
 2. Decide whether the legacy web dashboard is supported at all. If not,
-   explicitly retire its CLI/docs path before moving it.
+   explicitly retire its CLI/docs path before moving it. Still open.
 3. Once runtime imports are gone, re-run this audit and confirm the remaining
-   references are docs-only.
+   references are docs-only. Completed in follow-up cleanup work.
 4. Only then move the legacy smart-cleaner files into `legacy/` in a separate,
-   no-behavior-change PR.
+   no-behavior-change PR. Completed.
 
 ## Commands Used
 

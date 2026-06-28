@@ -6,6 +6,18 @@ Last updated: 2026-06-26
 
 Performance engine integration is **complete**. The parallel, incremental scanner is now wired into the core CLI (`main.py`) and the GUI (`startup_manager_gui.py`), with user-facing controls and a benchmark/clear-cache workflow.
 
+## Repo boundary
+
+Cleanroom desktop GUI + CLI/headless remains the active supported product path.
+Active runtime boundary modules now live at the repo root:
+
+- `cleanup_profiles.py`
+- `archive_runtime.py`
+
+Legacy smart-cleaner implementation/docs are archived under
+`legacy/smart_cleaner/`, while root `smart_config.py`, `archive_manager.py`,
+and `smart_scheduler.py` remain compatibility shims.
+
 ## What was delivered
 
 ### 1. Performance engine (`performance_engine.py`)
