@@ -2,6 +2,8 @@
 """Web dashboard for monitoring and managing smart cleanup operations."""
 import json
 import logging
+import os
+import secrets
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List
@@ -35,8 +37,9 @@ class Dashboard:
     def _setup_app(self):
         """Setup Flask application and routes."""
         self.app = Flask(__name__)
-        self.app.config['SECRET_KEY'] = 'smart-cleaner-dashboard'
-        self.socketio = SocketIO(self.app, cors_allowed_origins="*")
+        self.app.config['SECRET_KEY'] = os.environ.get(
+            'DASHBOARD_SECRET_KEY', secrets.token_hex(32))
+        self.socketio = SocketIO(self.app, cors_allowed_origins=self.host)
 
         @self.app.route('/')
         def index():
@@ -48,7 +51,7 @@ class Dashboard:
 
         @self.app.route('/api/history')
         def get_history():
-            days = request.args.get('days', 7, type=int)
+            days = min(request.args.get('days', 7, type=int), 365)
             return jsonify(self._get_cleanup_history(days))
 
         @self.app.route('/api/archive')
@@ -65,14 +68,18 @@ class Dashboard:
             profile = data.get('profile', 'conservative')
             dry_run = data.get('dry_run', True)
 
+            allowed_profiles = ('conservative', 'moderate', 'aggressive')
+            if profile not in allowed_profiles:
+                return jsonify({
+                    'success': False,
+                    'error': f'Invalid profile. Must be one of: {allowed_profiles}'
+                }), 400
+
             try:
                 # Execute cleanup
                 import subprocess
                 cmd = ['python', 'main.py', '--profile', profile]
-                if dry_run:
-                    # Remove --apply for dry run
-                    pass
-                else:
+                if not dry_run:
                     cmd.append('--apply')
 
                 result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
@@ -96,13 +103,24 @@ class Dashboard:
             try:
                 import archive_runtime
                 log_file = 'cleanup_log.json'
+                archive_dir = Path('cleanup_archive').resolve()
 
-                # Convert files to archive_custody format
-                records = []
+                # Validate each path is within the archive directory
+                validated = []
                 for file_path in files:
+                    resolved = Path(file_path).resolve()
+                    if not str(resolved).startswith(str(archive_dir)):
+                        return jsonify({
+                            'success': False,
+                            'error': f'Path outside archive directory: {file_path}'
+                        }), 403
+                    validated.append(str(resolved))
+
+                records = []
+                for file_path in validated:
                     records.append({
                         'dest': file_path,
-                        'src': '',  # Will be filled from log
+                        'src': '',
                         'reason': 'manual_delete',
                         'size': 0,
                         'when': datetime.now().isoformat()
