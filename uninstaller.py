@@ -160,11 +160,22 @@ def build_uninstall_command(entry, quiet=False):
     return cmd
 
 
+_SHELL_META = re.compile(r'[&|;<>`$]')
+
+
 def run_uninstall(entry, quiet=False, timeout=1800):
-    """Run the uninstaller and wait. Returns (exit_code, message)."""
+    """Run the uninstaller and wait. Returns (exit_code, message).
+
+    The command comes from the Windows registry UninstallString which is a
+    full command line (may include quoted paths and arguments), so shell=True
+    is required.  We reject strings containing shell meta-characters to
+    guard against command chaining.
+    """
     cmd = build_uninstall_command(entry, quiet)
     if not cmd:
         return 1, 'No uninstall command available.'
+    if _SHELL_META.search(cmd):
+        return 1, 'Uninstall string contains suspicious characters.'
     try:
         flags = getattr(subprocess, 'CREATE_NO_WINDOW', 0) if quiet else 0
         result = subprocess.run(cmd, shell=True, timeout=timeout, creationflags=flags)
