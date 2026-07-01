@@ -19,7 +19,7 @@ Cleanroom desktop GUI + CLI/headless flow as the active supported product path.
 - Legacy compatibility implementation/docs are archived, with root compatibility shims retained where needed
 - 366 tests passing, ruff clean
 
-![Cleanroom Review](https://github.com/Z3r0DayZion-install/cleanroom-windows/releases/download/v1.0.6/cleanroom-review.png)
+![Cleanroom Review](https://github.com/lazelife420-spec/cleanroom-windows/releases/download/v1.0.6/cleanroom-review.png)
 
 ## Smoke proof
 Packaged smoke script: PASS (first-run, archive, receipt, clean exit)
