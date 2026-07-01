@@ -691,10 +691,10 @@ class StartupManagerGUI(ctk.CTk):
                 tone = PROOF
             else:
                 tone = TEXT
-            self.cleanup_status_hero.config(text=hero, fg=tone)
-            self.cleanup_msg_hero.config(text=sub)
+            self.cleanup_status_hero.configure(text=hero, fg=tone)
+            self.cleanup_msg_hero.configure(text=sub)
         if hasattr(self, 'cleanup_status_lbl'):
-            self.cleanup_status_lbl.config(text=footer)
+            self.cleanup_status_lbl.configure(text=footer)
         try:
             on_cleaner = self.tab_control.index('current') == 3
         except Exception:
@@ -715,9 +715,9 @@ class StartupManagerGUI(ctk.CTk):
                 btn.pack_forget()
             else:
                 btn.pack(side='left', padx=(8, 0))
-                btn.config(state='normal' if show_actions else 'disabled')
+                btn.configure(state='normal' if show_actions else 'disabled')
         if hasattr(self, 'scan_btn'):
-            self.scan_btn.config(
+            self.scan_btn.configure(
                 state='disabled' if scanning else 'normal',
                 text='Scanning…' if scanning else 'Scan Now',
             )
@@ -745,7 +745,7 @@ class StartupManagerGUI(ctk.CTk):
                 self.skip_scan_folder_btn.pack_forget()
         for attr in ('scan_btn', 'dashboard_primary_btn'):
             if hasattr(self, attr) and attr != 'scan_btn':
-                getattr(self, attr).config(state='disabled' if scanning else 'normal')
+                getattr(self, attr).configure(state='disabled' if scanning else 'normal')
         if hasattr(self, 'tb_scan'):
             self.tb_scan.configure(state='disabled' if scanning else 'normal')
         if hasattr(self, '_update_cleanup_empty_state'):
@@ -805,9 +805,9 @@ class StartupManagerGUI(ctk.CTk):
         else:
             tone = ACCENT if state == IDLE_READY else TEXT
         if hasattr(self, 'dashboard_status_lbl'):
-            self.dashboard_status_lbl.config(text=hero, fg=tone)
+            self.dashboard_status_lbl.configure(text=hero, fg=tone)
         if hasattr(self, 'dashboard_msg_lbl'):
-            self.dashboard_msg_lbl.config(text=sub)
+            self.dashboard_msg_lbl.configure(text=sub)
         try:
             on_home = self.tab_control.index('current') == 0
         except Exception:
@@ -821,44 +821,44 @@ class StartupManagerGUI(ctk.CTk):
         if scanning:
             for attr in ('dashboard_primary_btn', 'dashboard_preview_btn', 'dashboard_archive_btn'):
                 if hasattr(self, attr):
-                    getattr(self, attr).config(state='disabled')
+                    getattr(self, attr).configure(state='disabled')
             self.dashboard_primary_btn.configure(text='Scanning…')
             self._sync_global_actions(LOADING, 0, False)
             return
         if state == RECEIPT_READY:
             self.dashboard_primary_btn.configure(
                 text='Review Candidates', command=lambda: self._navigate_to_tab(3))
-            self.dashboard_preview_btn.config(state='normal')
-            self.dashboard_archive_btn.config(
+            self.dashboard_preview_btn.configure(state='normal')
+            self.dashboard_archive_btn.configure(
                 state='normal' if checked_n > 0 else 'disabled')
             self.dashboard_secondary_btn.configure(
                 text='Proof Ledger', command=lambda: self._navigate_to_tab(1))
         elif state == RESULTS_READY:
             self.dashboard_primary_btn.configure(
                 text='Review Candidates', command=lambda: self._navigate_to_tab(3))
-            self.dashboard_preview_btn.config(state='disabled')
-            self.dashboard_archive_btn.config(state='disabled')
+            self.dashboard_preview_btn.configure(state='disabled')
+            self.dashboard_archive_btn.configure(state='disabled')
             self.dashboard_secondary_btn.configure(
                 text='Proof Ledger', command=lambda: self._navigate_to_tab(1))
         elif state == EMPTY_DONE:
             self.dashboard_primary_btn.configure(
                 text='Scan Again', command=self.refresh_cleanup)
-            self.dashboard_preview_btn.config(state='disabled')
-            self.dashboard_archive_btn.config(state='disabled')
+            self.dashboard_preview_btn.configure(state='disabled')
+            self.dashboard_archive_btn.configure(state='disabled')
             self.dashboard_secondary_btn.configure(
                 text='Proof Ledger', command=lambda: self._navigate_to_tab(1))
         elif custody_missing:
             self.dashboard_primary_btn.configure(
                 text='Review custody', command=lambda: self._navigate_to_tab(1))
-            self.dashboard_preview_btn.config(state='disabled')
-            self.dashboard_archive_btn.config(state='disabled')
+            self.dashboard_preview_btn.configure(state='disabled')
+            self.dashboard_archive_btn.configure(state='disabled')
             self.dashboard_secondary_btn.configure(
                 text='Open Archive', command=lambda: self._navigate_to_tab(6))
         else:
             self.dashboard_primary_btn.configure(
                 text='Scan Now', command=self.refresh_cleanup)
-            self.dashboard_preview_btn.config(state='disabled')
-            self.dashboard_archive_btn.config(state='disabled')
+            self.dashboard_preview_btn.configure(state='disabled')
+            self.dashboard_archive_btn.configure(state='disabled')
             self.dashboard_secondary_btn.configure(
                 text='Proof Ledger', command=lambda: self._navigate_to_tab(1))
         self.preview_receipt_btn = self.dashboard_preview_btn
