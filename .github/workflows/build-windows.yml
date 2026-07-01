@@ -89,22 +89,22 @@ jobs:
         run: python scripts/verify_release_surface.py --verify-checksums --version "${{ steps.ver.outputs.version }}"
 
       - name: Attest installer provenance
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: dist/Cleanroom-Setup-${{ steps.ver.outputs.version }}.exe
 
       - name: Attest portable exe provenance
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: dist/Cleanroom/Cleanroom.exe
 
       - name: Attest SHA256SUMS provenance
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: SHA256SUMS.txt
 
       - name: Attest screenshot provenance
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: |
             assets/screenshots/cleanroom-review.png

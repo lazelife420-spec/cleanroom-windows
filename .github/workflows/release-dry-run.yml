@@ -91,7 +91,7 @@ jobs:
           python scripts/verify_release_surface.py --verify-checksums --verify-artifacts --tag "v${{ steps.ver.outputs.version }}" --version "${{ steps.ver.outputs.version }}"
 
       - name: Attest release artifact provenance (dry run)
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: |
             dist/Cleanroom-Setup-${{ steps.ver.outputs.version }}.exe
