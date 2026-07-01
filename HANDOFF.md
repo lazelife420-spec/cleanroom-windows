@@ -59,10 +59,10 @@ Recent changes (high-impact)
 - Settings tab (Ctrl+5): in-app editing of paths/archive dir/ages/thresholds/extensions/exclusions/whitelist; `_write_config` falls back to the per-user config when the active one is read-only; unknown config keys preserved on save.
 - Prune Archive dialog (Optimizer tab): dry-run preview then permanent deletion of archived files older than N days (`prune_archive.prune`).
 - Scheduled-task startup source: `startup_manager._list_logon_tasks` parses `schtasks /Query /FO CSV /V` (English column names — known localization limitation); read-only "Scheduled Tasks" category in the GUI.
-- CI: `.github/workflows/ci.yml` runs tests and builds the exe (+ best-effort installer) on windows-latest, uploading artifacts.
+- CI: 5 workflows on GitHub Actions — `ci.yml` (tests / public-surface brand+docs scan / migration receipt tests), `build-windows.yml` (portable exe + installer build with provenance attestation, on push to main/tags/PRs), `release.yml` (tag-triggered: build, checksum, attest, create GitHub Release), `codeql.yml` (security scanning on push/PR/weekly schedule), `release-dry-run.yml`. All currently green on `main`. Dependabot keeps `requirements.txt` and Actions versions current — check `gh pr list` periodically since Dependabot PRs against a stale base commit can fail CI for reasons unrelated to the actual bump (rebase with `@dependabot rebase` if so).
 - Restore previews use Pillow when available (JPEG/WebP/BMP/ICO/TIFF); PNG/GIF work without it.
 - App icon: `assets/brand/cleanroom-icon.ico` / `cleanroom-icon.png` (shield emblem crop), embedded in exe + window titlebar; full logo at `assets/brand/cleanroom-logo.png`.
-- Test suite: 132 passing (`pytest -p no:xonsh tests/` — the globally installed xonsh pytest plugin breaks in headless consoles, hence the flag). One E2E occasionally hits a transient TclError creating the Tk window under full-suite load; re-run passes.
+- Test suite: 366 passing (`pytest -p no:xonsh tests/` — the globally installed xonsh pytest plugin breaks in headless consoles, hence the flag). Grew from 132 with the performance-engine work (see `STATUS.md`) — this file previously understated the count; keep this line and `STATUS.md` in sync going forward. One E2E occasionally hits a transient TclError creating the Tk window under full-suite load; re-run passes.
 
 How to run (dev)
 1. Ensure Python 3.14+ is available and run from project root.
@@ -106,10 +106,11 @@ Known issues & notes
 - Code-signing pipeline is ready (`sign_artifacts.ps1`) but unsigned until a real OV/EV certificate is provided; `-SelfSigned` exists for local testing only.
 
 Priority next steps
-1. Obtain an OV/EV code-signing certificate and run `sign_artifacts.ps1` in the release flow (user action required)
+1. Obtain an OV/EV code-signing certificate and run `sign_artifacts.ps1` in the release flow (user action required) — still the main release-readiness gap
 2. Enable/disable actions for scheduled tasks (`schtasks /Change /TN x /DISABLE`) with the same backup-first pattern
 3. Locale-independent scheduled-task listing (PowerShell `Get-ScheduledTask` or COM instead of English CSV columns)
-4. Cleanup-log rotation/compaction (restore log grows unbounded); push repo to GitHub so CI runs
+4. Cleanup-log rotation/compaction (restore log grows unbounded)
+5. Branch hygiene: ~40+ stale branches accumulated (audit/chore/docs/backup/devin/* branches past their merge) — worth a cleanup pass
 
 Quick contact notes
 - File to open first: `startup_manager_gui.py` (entrypoint)
