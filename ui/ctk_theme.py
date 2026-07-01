@@ -18,6 +18,16 @@ TYPE_BODY = 12
 TYPE_TABLE = 11
 TYPE_MICRO = 10
 
+# Shared spacing / shell tokens
+SPACE_1 = 4
+SPACE_2 = 8
+SPACE_3 = 12
+SPACE_4 = 16
+
+RADIUS_SM = 8
+RADIUS_MD = 10
+RADIUS_LG = 12
+
 ARCHIVE_BANNER_TEXT = (
     'Archive-first mode is ON — Cleanroom moves files to archive before any removal.'
 )

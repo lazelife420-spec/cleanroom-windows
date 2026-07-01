@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import tkinter as tk
+from tkinter import ttk
 
 import customtkinter as ctk
 
@@ -36,6 +37,91 @@ def proof_card(
     value.pack(anchor='w', pady=(4, 0))
     card.configure(width=min_width)
     return card, value
+
+
+def hero_state_panel(
+    parent,
+    *,
+    title: str = '',
+    card_bg: str,
+    title_color: str,
+    state_text: str,
+    state_color: str,
+    subtitle: str = '',
+    title_font_size: int = 15,
+    state_font_size: int = 11,
+    subtitle_wrap: int = 480,
+) -> dict:
+    """Shared hero shell for Home/Cleaner state and CTA rows."""
+    shell = ctk_theme.frame(parent, card_bg, corner_radius=ctk_theme.RADIUS_MD)
+    inner = tk.Frame(shell, bg=card_bg)
+    inner.pack(fill='x', padx=ctk_theme.SPACE_3, pady=ctk_theme.SPACE_2)
+    title_row = tk.Frame(inner, bg=card_bg)
+    title_row.pack(fill='x')
+    title_lbl = None
+    if title:
+        title_lbl = tk.Label(
+            title_row, text=title, bg=card_bg, fg=title_color,
+            font=('Segoe UI', title_font_size, 'bold'),
+        )
+        title_lbl.pack(side='left')
+    state_lbl = tk.Label(
+        title_row, text=state_text, bg=card_bg, fg=state_color,
+        font=('Segoe UI', state_font_size, 'bold'),
+    )
+    state_pad = (12, 0) if title else (0, 0)
+    state_lbl.pack(side='left', padx=state_pad)
+    subtitle_lbl = None
+    if subtitle is not None:
+        subtitle_lbl = tk.Label(
+            title_row,
+            text=subtitle,
+            bg=card_bg,
+            fg=title_color,
+            font=('Segoe UI', ctk_theme.TYPE_BODY),
+            wraplength=subtitle_wrap,
+            justify='left',
+        )
+        subtitle_lbl.pack(side='left', padx=(ctk_theme.SPACE_2, 0))
+    action_row = tk.Frame(inner, bg=card_bg)
+    action_row.pack(anchor='w', pady=(ctk_theme.SPACE_2, 0))
+    return {
+        'frame': shell,
+        'inner': inner,
+        'title_row': title_row,
+        'title_lbl': title_lbl,
+        'state_lbl': state_lbl,
+        'subtitle_lbl': subtitle_lbl,
+        'action_row': action_row,
+    }
+
+
+def trust_stat_tile(parent, *, caption: str, card_bg: str, text_color: str, muted: str) -> dict:
+    """Compact trust/stat tile with optional canvas for small Home metrics."""
+    card = tk.Frame(parent, bg=card_bg, highlightthickness=0)
+    inner = tk.Frame(card, bg=card_bg)
+    inner.pack(fill='x', padx=10, pady=5)
+    canvas = tk.Canvas(inner, width=56, height=56, bg=card_bg, highlightthickness=0)
+    text_col = tk.Frame(inner, bg=card_bg)
+    tk.Label(
+        text_col, text=caption, bg=card_bg, fg=muted, font=('Segoe UI', 7, 'bold'),
+    ).pack(anchor='w')
+    value_lbl = tk.Label(
+        text_col, text='—', bg=card_bg, fg=text_color, font=('Segoe UI', 12, 'bold'),
+    )
+    value_lbl.pack(anchor='w')
+    note_lbl = tk.Label(
+        text_col, text='', bg=card_bg, fg=muted, font=('Segoe UI', 7),
+    )
+    note_lbl.pack(anchor='w')
+    return {
+        'frame': card,
+        'inner': inner,
+        'canvas': canvas,
+        'text_col': text_col,
+        'value_lbl': value_lbl,
+        'note_lbl': note_lbl,
+    }
 
 
 def app_shell_header(
@@ -453,6 +539,11 @@ def recent_proof_tile(
     return card, detail
 
 
+def guided_action_card(*args, **kwargs) -> ctk.CTkFrame:
+    """Named wrapper for Home guided actions; delegates to recommendation_card."""
+    return recommendation_card(*args, **kwargs)
+
+
 def recommendation_card(
     parent,
     *,
@@ -515,6 +606,64 @@ def recommendation_card(
         except Exception:
             pass
     return card
+
+
+def cleaner_summary_tile(parent, *, text: str, row: int, column: int, padx=(0, 8)) -> ttk.Label:
+    """Shared summary pill for Cleaner top-line metrics."""
+    lbl = ttk.Label(parent, text=text, style='Badge.TLabel')
+    lbl.grid(row=row, column=column, sticky='w', padx=padx)
+    return lbl
+
+
+def candidate_detail_panel(
+    parent,
+    *,
+    card_bg: str,
+    proof: str,
+    wraplength: int = 260,
+) -> dict:
+    """Shared Cleaner detail shell with standard labels and actions row."""
+    detail = ctk_theme.frame(parent, card_bg, corner_radius=ctk_theme.RADIUS_MD)
+    detail_inner = ttk.Frame(detail, style='Card.TFrame')
+    detail_inner.pack(fill='both', expand=True, padx=ctk_theme.SPACE_3, pady=ctk_theme.SPACE_3)
+    ttk.Label(
+        detail_inner, text='Candidate details', font=('Segoe UI', 11, 'bold'),
+        background=card_bg,
+    ).pack(anchor='w', pady=(0, ctk_theme.SPACE_2))
+    name_lbl = ttk.Label(
+        detail_inner, text='No candidate selected', style='CardInfo.TLabel',
+        wraplength=wraplength, font=('Segoe UI', 11, 'bold'),
+    )
+    name_lbl.pack(anchor='w', pady=(0, ctk_theme.SPACE_2))
+    path_lbl = ttk.Label(detail_inner, text='', style='CardInfo.TLabel', wraplength=wraplength, justify='left')
+    reason_lbl = ttk.Label(detail_inner, text='', style='CardInfo.TLabel', wraplength=wraplength, justify='left')
+    size_lbl = ttk.Label(detail_inner, text='', style='CardInfo.TLabel', wraplength=wraplength)
+    archive_lbl = ttk.Label(detail_inner, text='', style='CardInfo.TLabel', wraplength=wraplength, justify='left')
+    receipt_lbl = ttk.Label(detail_inner, text='', style='CardInfo.TLabel', wraplength=wraplength, justify='left')
+    why_lbl = ttk.Label(
+        detail_inner,
+        text='Run Scan to populate candidates, then click a row to review path, archive destination, and safety notes.',
+        style='CardInfo.TLabel',
+        wraplength=wraplength,
+        justify='left',
+        foreground=proof,
+    )
+    for lbl in (path_lbl, reason_lbl, size_lbl, archive_lbl, receipt_lbl, why_lbl):
+        lbl.pack(anchor='w', pady=(0, ctk_theme.SPACE_2))
+    btn_row = ttk.Frame(detail_inner, style='Card.TFrame')
+    btn_row.pack(fill='x', pady=(ctk_theme.SPACE_1, 0))
+    return {
+        'frame': detail,
+        'inner': detail_inner,
+        'name_lbl': name_lbl,
+        'path_lbl': path_lbl,
+        'reason_lbl': reason_lbl,
+        'size_lbl': size_lbl,
+        'archive_lbl': archive_lbl,
+        'receipt_lbl': receipt_lbl,
+        'why_lbl': why_lbl,
+        'button_row': btn_row,
+    }
 
 
 class ProofSummaryCard(tk.Frame):

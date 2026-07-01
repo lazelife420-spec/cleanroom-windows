@@ -46,12 +46,16 @@ from ui.proof_dashboard import (
     CommandBar,
     ProofSummaryCard,
     app_shell_header,
+    candidate_detail_panel,
+    cleaner_summary_tile,
     collapsible_section,
+    guided_action_card,
+    hero_state_panel,
     recent_proof_tile,
-    recommendation_card,
     settings_card,
     settings_pill_nav,
     sidebar_nav_button,
+    trust_stat_tile,
 )
 from ui.receipt_animation import (
     DEFAULT_LINES,
@@ -2019,21 +2023,22 @@ class StartupManagerGUI(ctk.CTk):
         self.optimizer_tab.grid_rowconfigure(2, weight=1)
         self.optimizer_tab.grid_columnconfigure(0, weight=1)
 
-        hero = ctk_theme.frame(self.optimizer_tab, CARD_BG, corner_radius=10)
+        hero_parts = hero_state_panel(
+            self.optimizer_tab,
+            card_bg=CARD_BG,
+            title_color=TEXT,
+            state_text='Ready to scan',
+            state_color=PROOF,
+            subtitle='',
+            title_font_size=0,
+            state_font_size=13,
+            subtitle_wrap=480,
+        )
+        hero = hero_parts['frame']
         hero.grid(row=0, column=0, sticky='ew', padx=10, pady=(4, 4))
-        hero_inner = ttk.Frame(hero, style='Card.TFrame')
-        hero_inner.pack(fill='x', padx=12, pady=8)
-        title_row = ttk.Frame(hero_inner, style='Card.TFrame')
-        title_row.pack(fill='x')
-        self.dashboard_status_lbl = tk.Label(
-            title_row, text='Ready to scan', bg=CARD_BG, fg=PROOF,
-            font=('Segoe UI', 13, 'bold'))
-        self.dashboard_status_lbl.pack(side='left')
-        self.dashboard_msg_lbl = ttk.Label(
-            title_row, text='', style='Info.TLabel')
-        self.dashboard_msg_lbl.pack(side='left', padx=(8, 0))
-        cta_row = ttk.Frame(hero_inner, style='Card.TFrame')
-        cta_row.pack(anchor='w', pady=(6, 0))
+        self.dashboard_status_lbl = hero_parts['state_lbl']
+        self.dashboard_msg_lbl = hero_parts['subtitle_lbl']
+        cta_row = hero_parts['action_row']
         self.dashboard_primary_btn = ttk.Button(
             cta_row, text='Scan Now', style='Primary.TButton', command=self.refresh_cleanup)
         self.dashboard_primary_btn.pack(side='left', ipadx=10, ipady=2)
@@ -2058,22 +2063,19 @@ class StartupManagerGUI(ctk.CTk):
         for col in range(4):
             cards.grid_columnconfigure(col, weight=1)
 
-        health_card = tk.Frame(cards, bg=CARD_BG, highlightbackground=BORDER, highlightthickness=1)
+        trust_tile = trust_stat_tile(
+            cards, caption='TO REVIEW', card_bg=CARD_BG, text_color=TEXT, muted=MUTED,
+        )
+        health_card = trust_tile['frame']
+        health_card.configure(highlightbackground=BORDER, highlightthickness=1)
         health_card.grid(row=0, column=0, sticky='ew', padx=(0, 6))
-        health_inner = tk.Frame(health_card, bg=CARD_BG)
-        health_inner.pack(fill='x', padx=8, pady=6)
-        self.health_canvas = tk.Canvas(health_inner, width=56, height=56, bg=CARD_BG, highlightthickness=0)
+        self.health_canvas = trust_tile['canvas']
         self.health_canvas.pack(side='left', padx=(0, 6))
-        health_text = tk.Frame(health_inner, bg=CARD_BG)
+        health_text = trust_tile['text_col']
         health_text.pack(side='left', fill='x', expand=True)
-        tk.Label(health_text, text='TO REVIEW', bg=CARD_BG, fg=MUTED,
-                 font=('Segoe UI', 7, 'bold')).pack(anchor='w')
-        self.health_band_lbl = tk.Label(health_text, text='—', bg=CARD_BG, fg=TEXT,
-                                        font=('Segoe UI', 12, 'bold'))
-        self.health_band_lbl.pack(anchor='w')
-        self.health_note_lbl = tk.Label(health_text, text='Evidence only',
-                                        bg=CARD_BG, fg=MUTED, font=('Segoe UI', 7))
-        self.health_note_lbl.pack(anchor='w')
+        self.health_band_lbl = trust_tile['value_lbl']
+        self.health_note_lbl = trust_tile['note_lbl']
+        self.health_note_lbl.config(text='Evidence only')
         self._add_tooltip(health_card, 'Cleanup candidates awaiting your review.')
 
         self.stat_startup_value = self._stat_card_compact(cards, 1, 'Startup items')
@@ -2160,22 +2162,14 @@ class StartupManagerGUI(ctk.CTk):
         self._dashboard_recommendations = []
         self._rec_context_menu = None
 
-        self._home_rec_empty_panel = ctk_theme.frame(rec_body, CARD_BG, corner_radius=12)
-        empty_inner = ttk.Frame(self._home_rec_empty_panel, style='Card.TFrame')
-        empty_inner.place(relx=0.5, rely=0.42, anchor='center')
-        ttk.Label(
-            empty_inner, text='No recommendations yet.',
-            font=('Segoe UI', 14, 'bold'), background=CARD_BG,
-        ).pack(anchor='center')
-        ttk.Label(
-            empty_inner,
-            text='Run Scan to review configured folders.\nCleanroom surfaces archive-first guidance with receipts.',
-            style='Info.TLabel', wraplength=420, justify='center',
-        ).pack(anchor='center', pady=(8, 16))
-        ttk.Button(
-            empty_inner, text='Scan Now', style='Primary.TButton', command=self.refresh_cleanup,
-        ).pack(anchor='center')
-        self._home_rec_empty = self._home_rec_empty_panel
+        self._home_rec_empty = self._build_workspace_empty_panel(
+            rec_body,
+            'No recommendations yet.',
+            'Run Scan to review configured folders.\nCleanroom surfaces archive-first guidance with receipts.',
+            'Scan Now',
+            self.refresh_cleanup,
+        )
+        self._home_rec_empty_panel = self._home_rec_empty
         self.schedule_btn = self.dashboard_secondary_btn
         self.open_archive_btn = self.dashboard_secondary_btn
         self.open_log_btn = self.dashboard_secondary_btn
@@ -2593,14 +2587,21 @@ class StartupManagerGUI(ctk.CTk):
     def _stat_card_compact(self, parent, column, caption):
         """Compact horizontal stat chip for dense tabs (Archive)."""
         pad = (0, 6) if column < 3 else (0, 0)
-        card = tk.Frame(parent, bg=CARD_BG, highlightthickness=0)
+        tile = trust_stat_tile(
+            parent, caption=caption, card_bg=CARD_BG, text_color=TEXT, muted=MUTED,
+        )
+        card = tile['frame']
         card.grid(row=0, column=column, sticky='ew', padx=pad)
-        inner = tk.Frame(card, bg=CARD_BG)
-        inner.pack(fill='x', padx=10, pady=5)
-        value = tk.Label(inner, text='—', bg=CARD_BG, fg=TEXT, font=('Segoe UI', 15, 'bold'))
+        tile['canvas'].destroy()
+        text_col = tile['text_col']
+        for child in list(text_col.winfo_children()):
+            child.destroy()
+        value = tk.Label(text_col, text='—', bg=CARD_BG, fg=TEXT, font=('Segoe UI', 15, 'bold'))
         value.pack(side='left')
-        tk.Label(inner, text=caption, bg=CARD_BG, fg=MUTED,
-                 font=('Segoe UI', 8)).pack(side='left', padx=(8, 0), pady=(3, 0))
+        tk.Label(
+            text_col, text=caption, bg=CARD_BG, fg=MUTED, font=('Segoe UI', 8),
+        ).pack(side='left', padx=(8, 0), pady=(3, 0))
+        text_col.pack(fill='x')
         return value
 
     def _config_status_label(self):
@@ -3075,23 +3076,23 @@ class StartupManagerGUI(ctk.CTk):
         self.cleanup_tab.grid_rowconfigure(3, weight=1)
         self.cleanup_tab.grid_columnconfigure(0, weight=1)
 
-        hero = ctk_theme.frame(self.cleanup_tab, CARD_BG, corner_radius=10)
+        hero_parts = hero_state_panel(
+            self.cleanup_tab,
+            title='Cleaner',
+            card_bg=CARD_BG,
+            title_color=TEXT,
+            state_text='Ready to scan',
+            state_color=PROOF,
+            subtitle='',
+            title_font_size=15,
+            state_font_size=11,
+            subtitle_wrap=480,
+        )
+        hero = hero_parts['frame']
         hero.grid(row=0, column=0, sticky='ew', padx=10, pady=(4, 4))
-        hero_inner = ttk.Frame(hero, style='Card.TFrame')
-        hero_inner.pack(fill='x', padx=12, pady=8)
-        title_row = ttk.Frame(hero_inner, style='Card.TFrame')
-        title_row.pack(fill='x')
-        ttk.Label(title_row, text='Cleaner', font=('Segoe UI', 15, 'bold'),
-                  background=CARD_BG).pack(side='left')
-        self.cleanup_status_hero = tk.Label(
-            title_row, text='Ready to scan', bg=CARD_BG, fg=PROOF,
-            font=('Segoe UI', 11, 'bold'))
-        self.cleanup_status_hero.pack(side='left', padx=(12, 0))
-        self.cleanup_msg_hero = ttk.Label(
-            title_row, text='', style='Info.TLabel', wraplength=480)
-        self.cleanup_msg_hero.pack(side='left', padx=(8, 0))
-        cta_row = ttk.Frame(hero_inner, style='Card.TFrame')
-        cta_row.pack(anchor='w', pady=(6, 0))
+        self.cleanup_status_hero = hero_parts['state_lbl']
+        self.cleanup_msg_hero = hero_parts['subtitle_lbl']
+        cta_row = hero_parts['action_row']
         self.scan_btn = ttk.Button(
             cta_row, text='Scan Now', style='Primary.TButton', command=self.refresh_cleanup)
         self.scan_btn.pack(side='left', ipadx=8, ipady=2)
@@ -3110,14 +3111,10 @@ class StartupManagerGUI(ctk.CTk):
         self._cleanup_chips = chips
         for col in range(4):
             chips.grid_columnconfigure(col, weight=1)
-        self.cleanup_count_label = ttk.Label(chips, text='0 candidates', style='Badge.TLabel')
-        self.cleanup_count_label.grid(row=0, column=0, sticky='w', padx=(0, 8))
-        self.cleanup_size_label = ttk.Label(chips, text='0B reclaimable', style='Badge.TLabel')
-        self.cleanup_size_label.grid(row=0, column=1, sticky='w', padx=(0, 8))
-        self.cleanup_archive_label = ttk.Label(chips, text='Archive: —', style='Badge.TLabel')
-        self.cleanup_archive_label.grid(row=0, column=2, sticky='w', padx=(0, 8))
-        self.cleanup_cat_lbl = ttk.Label(chips, text='', style='Badge.TLabel')
-        self.cleanup_cat_lbl.grid(row=0, column=3, sticky='w')
+        self.cleanup_count_label = cleaner_summary_tile(chips, text='0 candidates', row=0, column=0)
+        self.cleanup_size_label = cleaner_summary_tile(chips, text='0B reclaimable', row=0, column=1)
+        self.cleanup_archive_label = cleaner_summary_tile(chips, text='Archive: —', row=0, column=2)
+        self.cleanup_cat_lbl = cleaner_summary_tile(chips, text='', row=0, column=3, padx=(0, 0))
 
         tools = ttk.Frame(self.cleanup_tab, style='Content.TFrame')
         tools.grid(row=2, column=0, sticky='ew', padx=10, pady=(0, 4))
@@ -3180,37 +3177,17 @@ class StartupManagerGUI(ctk.CTk):
         self.cleanup_tree.grid(row=0, column=0, sticky='nsew')
         cleanup_vscroll.grid(row=0, column=1, sticky='ns')
 
-        detail = ctk_theme.frame(cleanup_right, CARD_BG, corner_radius=10)
+        detail_parts = candidate_detail_panel(cleanup_right, card_bg=CARD_BG, proof=PROOF)
+        detail = detail_parts['frame']
         detail.pack(fill='both', expand=True)
-        detail_inner = ttk.Frame(detail, style='Card.TFrame')
-        detail_inner.pack(fill='both', expand=True, padx=12, pady=12)
-        ttk.Label(detail_inner, text='Candidate details', font=('Segoe UI', 11, 'bold'),
-                  background=CARD_BG).pack(anchor='w', pady=(0, 8))
-        self._cleanup_detail_name = ttk.Label(
-            detail_inner, text='No candidate selected', style='CardInfo.TLabel', wraplength=260,
-            font=('Segoe UI', 11, 'bold'))
-        self._cleanup_detail_name.pack(anchor='w', pady=(0, 8))
-        self._cleanup_detail_path = ttk.Label(
-            detail_inner, text='', style='CardInfo.TLabel', wraplength=260, justify='left')
-        self._cleanup_detail_reason = ttk.Label(
-            detail_inner, text='', style='CardInfo.TLabel', wraplength=260, justify='left')
-        self._cleanup_detail_size = ttk.Label(
-            detail_inner, text='', style='CardInfo.TLabel', wraplength=260)
-        self._cleanup_detail_archive = ttk.Label(
-            detail_inner, text='', style='CardInfo.TLabel', wraplength=260, justify='left')
-        self._cleanup_detail_receipt = ttk.Label(
-            detail_inner, text='', style='CardInfo.TLabel', wraplength=260, justify='left')
-        self._cleanup_detail_why = ttk.Label(
-            detail_inner,
-            text='Run Scan to populate candidates, then click a row to review path, archive destination, and safety notes.',
-            style='CardInfo.TLabel', wraplength=260, justify='left', foreground=PROOF)
-        for lbl in (
-            self._cleanup_detail_path, self._cleanup_detail_reason, self._cleanup_detail_size,
-            self._cleanup_detail_archive, self._cleanup_detail_receipt, self._cleanup_detail_why,
-        ):
-            lbl.pack(anchor='w', pady=(0, 8))
-        cleaner_detail_btns = ttk.Frame(detail_inner, style='Card.TFrame')
-        cleaner_detail_btns.pack(fill='x', pady=(4, 0))
+        self._cleanup_detail_name = detail_parts['name_lbl']
+        self._cleanup_detail_path = detail_parts['path_lbl']
+        self._cleanup_detail_reason = detail_parts['reason_lbl']
+        self._cleanup_detail_size = detail_parts['size_lbl']
+        self._cleanup_detail_archive = detail_parts['archive_lbl']
+        self._cleanup_detail_receipt = detail_parts['receipt_lbl']
+        self._cleanup_detail_why = detail_parts['why_lbl']
+        cleaner_detail_btns = detail_parts['button_row']
         self._cleanup_btn_open = ttk.Button(
             cleaner_detail_btns, text='Open location', style='Action.TButton',
             command=self._cleanup_open_location)
@@ -3230,21 +3207,13 @@ class StartupManagerGUI(ctk.CTk):
 
         self._cleanup_tree_card = tree_card
         self._cleanup_detail_panel = detail
-        self._cleanup_empty_panel = ctk_theme.frame(body, CARD_BG, corner_radius=12)
-        empty_inner = ttk.Frame(self._cleanup_empty_panel, style='Card.TFrame')
-        empty_inner.place(relx=0.5, rely=0.42, anchor='center')
-        ttk.Label(
-            empty_inner, text='No cleanup candidates yet.',
-            font=('Segoe UI', 16, 'bold'), background=CARD_BG,
-        ).pack(anchor='center')
-        ttk.Label(
-            empty_inner,
-            text='Run Scan to review configured folders.',
-            style='Info.TLabel', wraplength=420, justify='center',
-        ).pack(anchor='center', pady=(8, 16))
-        ttk.Button(
-            empty_inner, text='Scan Now', style='Primary.TButton', command=self.refresh_cleanup,
-        ).pack(anchor='center')
+        self._cleanup_empty_panel = self._build_workspace_empty_panel(
+            body,
+            'No cleanup candidates yet.',
+            'Run Scan to review configured folders.',
+            'Scan Now',
+            self.refresh_cleanup,
+        )
         self._cleanup_loading_panel = ctk_theme.frame(body, CARD_BG, corner_radius=12)
         scan_inner = ttk.Frame(self._cleanup_loading_panel, style='Card.TFrame')
         scan_inner.place(relx=0.5, rely=0.44, anchor='center')
@@ -3559,7 +3528,7 @@ class StartupManagerGUI(ctk.CTk):
             child.destroy()
         self._rec_card_frames = []
         for i, r in enumerate(recs):
-            card = recommendation_card(
+            card = guided_action_card(
                 self._rec_cards_scroll,
                 index=i,
                 severity=r.get('severity', 'info'),
