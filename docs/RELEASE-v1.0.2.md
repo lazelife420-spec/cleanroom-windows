@@ -6,11 +6,11 @@ This is not a fake "1,247 issues fixed" optimizer. Cleanroom produces receipts, 
 
 ## Screenshots (proof-loop UI)
 
-![Cleanroom Review](https://github.com/Z3r0DayZion-install/cleanroom-windows/releases/download/v1.0.2/cleanroom-review.png)
+![Cleanroom Review](https://github.com/lazelife420-spec/cleanroom-windows/releases/download/v1.0.2/cleanroom-review.png)
 
-![Cleanroom Activity Ledger](https://github.com/Z3r0DayZion-install/cleanroom-windows/releases/download/v1.0.2/cleanroom-activity-ledger.png)
+![Cleanroom Activity Ledger](https://github.com/lazelife420-spec/cleanroom-windows/releases/download/v1.0.2/cleanroom-activity-ledger.png)
 
-![Cleanroom Proof Pack — custody evidence](https://github.com/Z3r0DayZion-install/cleanroom-windows/releases/download/v1.0.2/cleanroom-proof-pack-demo.png)
+![Cleanroom Proof Pack — custody evidence](https://github.com/lazelife420-spec/cleanroom-windows/releases/download/v1.0.2/cleanroom-proof-pack-demo.png)
 
 ## Highlights
 
@@ -43,5 +43,5 @@ Compare against `SHA256SUMS.txt` from this release.
 Release artifacts are built by GitHub Actions and include artifact attestations:
 
 ```powershell
-gh attestation verify .\Cleanroom-Setup-1.0.2.exe --repo Z3r0DayZion-install/cleanroom-windows
+gh attestation verify .\Cleanroom-Setup-1.0.2.exe --repo lazelife420-spec/cleanroom-windows
 ```

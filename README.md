@@ -16,17 +16,17 @@ It is not a fake "1,247 issues fixed" optimizer. Every cleanup, uninstall leftov
 
 Cleanroom is a Proof Foundry product.
 
-Repository: [`cleanroom-windows`](https://github.com/Z3r0DayZion-install/cleanroom-windows)
+Repository: [`cleanroom-windows`](https://github.com/lazelife420-spec/cleanroom-windows)
 
-**Latest GitHub release:** [Cleanroom v1.0.6](https://github.com/Z3r0DayZion-install/cleanroom-windows/releases/tag/v1.0.6) — `Cleanroom-Setup-1.0.6.exe` + `SHA256SUMS.txt` (CI-built, attestable)
+**Latest GitHub release:** [Cleanroom v1.0.6](https://github.com/lazelife420-spec/cleanroom-windows/releases/tag/v1.0.6) — `Cleanroom-Setup-1.0.6.exe` + `SHA256SUMS.txt` (CI-built, attestable)
 
 **Latest repo milestone:** [`v1.0.7-rc1`](docs/RELEASE-v1.0.7-rc1.md) — Ruff-clean, telemetry shim fixed, docs aligned with the current desktop product path
 
-![Cleanroom Review](https://github.com/Z3r0DayZion-install/cleanroom-windows/releases/download/v1.0.6/cleanroom-review.png)
+![Cleanroom Review](https://github.com/lazelife420-spec/cleanroom-windows/releases/download/v1.0.6/cleanroom-review.png)
 
-![Cleanroom Activity Ledger](https://github.com/Z3r0DayZion-install/cleanroom-windows/releases/download/v1.0.6/cleanroom-activity-ledger.png)
+![Cleanroom Activity Ledger](https://github.com/lazelife420-spec/cleanroom-windows/releases/download/v1.0.6/cleanroom-activity-ledger.png)
 
-![Cleanroom Proof Pack Demo](https://github.com/Z3r0DayZion-install/cleanroom-windows/releases/download/v1.0.6/cleanroom-proof-pack-demo.png)
+![Cleanroom Proof Pack Demo](https://github.com/lazelife420-spec/cleanroom-windows/releases/download/v1.0.6/cleanroom-proof-pack-demo.png)
 
 ---
 
@@ -127,7 +127,7 @@ python -m ruff check .
 python startup_manager_gui.py
 ```
 
-Or install the latest GitHub release: [v1.0.6](https://github.com/Z3r0DayZion-install/cleanroom-windows/releases/tag/v1.0.6).
+Or install the latest GitHub release: [v1.0.6](https://github.com/lazelife420-spec/cleanroom-windows/releases/tag/v1.0.6).
 
 ### Tests
 
@@ -146,10 +146,10 @@ powershell -ExecutionPolicy Bypass -File build_installer.ps1
 
 ### Verify provenance
 
-Release artifacts are built by GitHub Actions and include artifact attestations. After downloading `Cleanroom-Setup-1.0.6.exe` from [Releases](https://github.com/Z3r0DayZion-install/cleanroom-windows/releases):
+Release artifacts are built by GitHub Actions and include artifact attestations. After downloading `Cleanroom-Setup-1.0.6.exe` from [Releases](https://github.com/lazelife420-spec/cleanroom-windows/releases):
 
 ```powershell
-gh attestation verify .\Cleanroom-Setup-1.0.6.exe --repo Z3r0DayZion-install/cleanroom-windows
+gh attestation verify .\Cleanroom-Setup-1.0.6.exe --repo lazelife420-spec/cleanroom-windows
 ```
 
 Compare the SHA256 hash against `SHA256SUMS.txt` attached to the same release.

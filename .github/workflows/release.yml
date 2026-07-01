@@ -20,7 +20,7 @@ jobs:
     name: Release
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-python@v6
         with:
@@ -92,7 +92,7 @@ jobs:
           python scripts/verify_release_surface.py --verify-checksums --verify-artifacts --tag "${{ github.ref_name }}" --version "${{ steps.ver.outputs.version }}"
 
       - name: Attest release artifact provenance
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: |
             dist/Cleanroom-Setup-${{ steps.ver.outputs.version }}.exe

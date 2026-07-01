@@ -10,7 +10,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-REPO = 'Z3r0DayZion-install/cleanroom-windows'
+REPO = 'lazelife420-spec/cleanroom-windows'
 
 PUBLIC_DOC_GLOBS = ('README.md', 'docs/RELEASE-v*.md')
 
@@ -267,7 +267,7 @@ def verify_checksums(version: str | None = None) -> bool:
 
 def verify_tag_alignment(tag: str, *, verify_artifacts: bool = False) -> bool:
     """Fail if tag, brand version, docs, README URLs, or artifacts drift."""
-    import brand  # noqa: WPS433
+    import brand
 
     version = tag.lstrip('vV')
     ok = True

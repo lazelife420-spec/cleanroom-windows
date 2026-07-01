@@ -22,7 +22,7 @@ jobs:
     name: Release Dry Run
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-python@v6
         with:
@@ -91,7 +91,7 @@ jobs:
           python scripts/verify_release_surface.py --verify-checksums --verify-artifacts --tag "v${{ steps.ver.outputs.version }}" --version "${{ steps.ver.outputs.version }}"
 
       - name: Attest release artifact provenance (dry run)
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: |
             dist/Cleanroom-Setup-${{ steps.ver.outputs.version }}.exe
@@ -101,7 +101,7 @@ jobs:
             assets/screenshots/cleanroom-proof-pack-demo.png
 
       - name: Upload dry-run artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-dry-run-v${{ steps.ver.outputs.version }}
           path: |

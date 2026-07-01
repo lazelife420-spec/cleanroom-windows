@@ -459,7 +459,7 @@ class SmartCache:
 
     def _key(self, directories: List[str], filters: Optional[Dict] = None) -> str:
         data = {'directories': sorted(str(d) for d in directories), 'filters': filters or {}}
-        return hashlib.md5(json.dumps(data, sort_keys=True).encode()).hexdigest()
+        return hashlib.sha256(json.dumps(data, sort_keys=True).encode()).hexdigest()
 
     def get(self, directories: List[str], filters: Optional[Dict] = None) -> Optional[List[Dict]]:
         cache_file = self.cache_dir / f"{self._key(directories, filters)}.json"
