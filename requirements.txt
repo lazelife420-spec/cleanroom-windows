@@ -7,4 +7,4 @@ send2trash>=1.8.0
 pytest
 pillow
 pystray
-customtkinter>=5.2.0
+customtkinter>=6.0.0
