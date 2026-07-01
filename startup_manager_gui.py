@@ -1385,6 +1385,18 @@ class StartupManagerGUI(ctk.CTk):
         except Exception:
             return None
 
+    def _load_photo_art(self, path, *, max_size=(377, 260)):
+        """PhotoImage loader for decorative hero art panels."""
+        try:
+            if not path or not PILImage or not Path(path).exists():
+                return None
+            with PILImage.open(path) as img:
+                img = img.convert('RGBA')
+                img.thumbnail(max_size, PILImage.LANCZOS)
+                return PILImageTk.PhotoImage(img, master=self)
+        except Exception:
+            return None
+
     def _dialog_colors(self):
         return dict(
             bg=BG, card=CARD_BG, head=HEAD_BG, accent=ACCENT,

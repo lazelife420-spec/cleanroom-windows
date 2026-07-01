@@ -51,12 +51,17 @@ def hero_state_panel(
     title_font_size: int = 15,
     state_font_size: int = 11,
     subtitle_wrap: int = 480,
+    art_photo=None,
 ) -> dict:
     """Shared hero shell for Home/Cleaner state and CTA rows."""
     shell = ctk_theme.frame(parent, card_bg, corner_radius=ctk_theme.RADIUS_MD)
     inner = tk.Frame(shell, bg=card_bg)
     inner.pack(fill='x', padx=ctk_theme.SPACE_3, pady=ctk_theme.SPACE_2)
-    title_row = tk.Frame(inner, bg=card_bg)
+    body_row = tk.Frame(inner, bg=card_bg)
+    body_row.pack(fill='x')
+    copy_col = tk.Frame(body_row, bg=card_bg)
+    copy_col.pack(side='left', fill='x', expand=True)
+    title_row = tk.Frame(copy_col, bg=card_bg)
     title_row.pack(fill='x')
     title_lbl = None
     if title:
@@ -83,16 +88,31 @@ def hero_state_panel(
             justify='left',
         )
         subtitle_lbl.pack(side='left', padx=(ctk_theme.SPACE_2, 0))
-    action_row = tk.Frame(inner, bg=card_bg)
+    art_lbl = None
+    if art_photo is not None:
+        art_shell = tk.Frame(
+            body_row,
+            bg=card_bg,
+            highlightbackground=state_color,
+            highlightthickness=1,
+        )
+        art_shell.pack(side='right', padx=(ctk_theme.SPACE_3, 0))
+        art_lbl = tk.Label(art_shell, image=art_photo, text='', bg=card_bg)
+        art_lbl.image = art_photo
+        art_lbl.pack(padx=ctk_theme.SPACE_1, pady=ctk_theme.SPACE_1)
+    action_row = tk.Frame(copy_col, bg=card_bg)
     action_row.pack(anchor='w', pady=(ctk_theme.SPACE_2, 0))
     return {
         'frame': shell,
         'inner': inner,
+        'body_row': body_row,
+        'copy_col': copy_col,
         'title_row': title_row,
         'title_lbl': title_lbl,
         'state_lbl': state_lbl,
         'subtitle_lbl': subtitle_lbl,
         'action_row': action_row,
+        'art_lbl': art_lbl,
     }
 
 
