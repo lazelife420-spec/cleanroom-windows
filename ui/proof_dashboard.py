@@ -116,6 +116,48 @@ def hero_state_panel(
     }
 
 
+def workflow_step_strip(
+    parent,
+    *,
+    steps: tuple[str, ...],
+    card_bg: str,
+    accent: str,
+    proof: str,
+    muted: str,
+) -> dict:
+    """Scan -> Preview Receipt -> Archive & Clean -> Restore progress strip.
+
+    Renders once; call set_workflow_step_index() to move the highlighted
+    step as the underlying scan/receipt/archive state changes.
+    """
+    shell = ctk_theme.frame(parent, card_bg, corner_radius=ctk_theme.RADIUS_MD)
+    inner = tk.Frame(shell, bg=card_bg)
+    inner.pack(fill='x', padx=ctk_theme.SPACE_3, pady=ctk_theme.SPACE_2)
+    step_labels: list[tk.Widget] = []
+    for i, step_text in enumerate(steps):
+        if i:
+            ctk_theme.label(
+                inner, '→', text_color=muted, font_size=11,
+            ).pack(side='left', padx=(6, 6))
+        lbl = ctk_theme.label(inner, step_text, text_color=muted, font_size=10, weight='bold')
+        lbl.pack(side='left')
+        step_labels.append(lbl)
+    return {'frame': shell, 'step_labels': step_labels}
+
+
+def set_workflow_step_index(
+    step_labels: list, current_index: int, *, accent: str, proof: str, muted: str,
+) -> None:
+    """Color workflow_step_strip labels: done=proof, current=accent, upcoming=muted."""
+    for i, lbl in enumerate(step_labels):
+        if i < current_index:
+            lbl.configure(text_color=proof)
+        elif i == current_index:
+            lbl.configure(text_color=accent)
+        else:
+            lbl.configure(text_color=muted)
+
+
 def trust_stat_tile(parent, *, caption: str, card_bg: str, text_color: str, muted: str) -> dict:
     """Compact trust/stat tile with optional canvas for small Home metrics."""
     card = tk.Frame(parent, bg=card_bg, highlightthickness=0)

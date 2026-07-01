@@ -52,10 +52,12 @@ from ui.proof_dashboard import (
     guided_action_card,
     hero_state_panel,
     recent_proof_tile,
+    set_workflow_step_index,
     settings_card,
     settings_pill_nav,
     sidebar_nav_button,
     trust_stat_tile,
+    workflow_step_strip,
 )
 from ui.receipt_animation import (
     DEFAULT_LINES,
@@ -794,6 +796,17 @@ class StartupManagerGUI(ctk.CTk):
             progress=getattr(self, '_scan_progress', None),
         )
         self._home_page_state = state
+        if hasattr(self, '_home_workflow_steps'):
+            if state == RECEIPT_READY:
+                step_idx = 2
+            elif state == RESULTS_READY:
+                step_idx = 1
+            elif state == EMPTY_DONE and getattr(self, '_brand_phase', None) == 'archived':
+                step_idx = 3
+            else:
+                step_idx = 0
+            set_workflow_step_index(
+                self._home_workflow_steps, step_idx, accent=ACCENT, proof=PROOF, muted=MUTED)
         if state == ERROR:
             tone = SEVERITY_COLORS.get('high', ACCENT)
         elif state in (LOADING, RECEIPT_READY):
@@ -2032,7 +2045,7 @@ class StartupManagerGUI(ctk.CTk):
             self._update_responsive_layout()
 
     def _build_optimizer_tab(self):
-        self.optimizer_tab.grid_rowconfigure(2, weight=1)
+        self.optimizer_tab.grid_rowconfigure(3, weight=1)
         self.optimizer_tab.grid_columnconfigure(0, weight=1)
 
         hero_parts = hero_state_panel(
@@ -2069,8 +2082,18 @@ class StartupManagerGUI(ctk.CTk):
         self._add_tooltip(self.dashboard_primary_btn, 'Scan configured folders for cleanup candidates.')
         self.preview_receipt_btn = self.dashboard_preview_btn
 
+        workflow_parts = workflow_step_strip(
+            self.optimizer_tab,
+            steps=('Scan', 'Preview Receipt', 'Archive & Clean', 'Restore'),
+            card_bg=CARD_BG, accent=ACCENT, proof=PROOF, muted=MUTED,
+        )
+        workflow_strip = workflow_parts['frame']
+        workflow_strip.grid(row=1, column=0, sticky='ew', padx=10, pady=(0, 4))
+        self._home_workflow_steps = workflow_parts['step_labels']
+        self._add_tooltip(workflow_strip, 'Cleanroom\'s archive-first workflow — the highlighted step is next.')
+
         cards = ttk.Frame(self.optimizer_tab, style='Content.TFrame')
-        cards.grid(row=1, column=0, sticky='ew', padx=10, pady=(0, 4))
+        cards.grid(row=2, column=0, sticky='ew', padx=10, pady=(0, 4))
         self._home_cards = cards
         for col in range(4):
             cards.grid_columnconfigure(col, weight=1)
@@ -2098,7 +2121,7 @@ class StartupManagerGUI(ctk.CTk):
             self.optimizer_tab, fg_color=BG, corner_radius=0,
             scrollbar_button_color=BORDER, scrollbar_button_hover_color=HEAD_BG,
         )
-        self._home_scroll.grid(row=2, column=0, sticky='nsew', padx=10, pady=(0, 8))
+        self._home_scroll.grid(row=3, column=0, sticky='nsew', padx=10, pady=(0, 8))
         self._home_recent = self._home_scroll
         scroll = self._home_scroll
 
