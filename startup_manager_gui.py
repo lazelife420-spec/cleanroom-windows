@@ -2058,6 +2058,8 @@ class StartupManagerGUI(ctk.CTk):
             title_font_size=0,
             state_font_size=13,
             subtitle_wrap=480,
+            byline=brand.APP_PUBLIC_BYLINE,
+            muted=MUTED,
         )
         hero = hero_parts['frame']
         hero.grid(row=0, column=0, sticky='ew', padx=10, pady=(4, 4))

@@ -52,6 +52,8 @@ def hero_state_panel(
     state_font_size: int = 11,
     subtitle_wrap: int = 480,
     art_photo=None,
+    byline: str = '',
+    muted: str = '',
 ) -> dict:
     """Shared hero shell for Home/Cleaner state and CTA rows."""
     shell = ctk_theme.frame(parent, card_bg, corner_radius=ctk_theme.RADIUS_MD)
@@ -61,6 +63,13 @@ def hero_state_panel(
     body_row.pack(fill='x')
     copy_col = tk.Frame(body_row, bg=card_bg)
     copy_col.pack(side='left', fill='x', expand=True)
+    byline_lbl = None
+    if byline:
+        byline_lbl = tk.Label(
+            copy_col, text=byline, bg=card_bg, fg=(muted or title_color),
+            font=('Segoe UI', ctk_theme.TYPE_MICRO),
+        )
+        byline_lbl.pack(anchor='w', pady=(0, ctk_theme.SPACE_1))
     title_row = tk.Frame(copy_col, bg=card_bg)
     title_row.pack(fill='x')
     title_lbl = None
@@ -113,6 +122,7 @@ def hero_state_panel(
         'subtitle_lbl': subtitle_lbl,
         'action_row': action_row,
         'art_lbl': art_lbl,
+        'byline_lbl': byline_lbl,
     }
 
 
