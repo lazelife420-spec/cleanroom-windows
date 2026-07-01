@@ -101,7 +101,7 @@ jobs:
             assets/screenshots/cleanroom-proof-pack-demo.png
 
       - name: Upload dry-run artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-dry-run-v${{ steps.ver.outputs.version }}
           path: |
